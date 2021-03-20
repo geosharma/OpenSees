@@ -72,6 +72,7 @@ class Node : public DomainComponent
     // public methods for obtaining the nodal coordinates
     virtual const Vector &getCrds(void) const;
     virtual int getDisplayCrds(Vector &results, double fact, int displayMode=0);
+    virtual int getDisplayRots(Vector& results, double fact, int displayMode = 0);
     virtual int setDisplayCrds(const Vector &theCrds);
 
     // public methods for obtaining committed and trial 
@@ -128,7 +129,7 @@ class Node : public DomainComponent
     virtual int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
     virtual void Print(OPS_Stream &s, int flag = 0);
-    virtual int displaySelf(Renderer &theRenderer, int displayMode, float fact);
+    virtual int displaySelf(Renderer &theRenderer, int theEleMode, int theNodeMode, float fact);
 
     // AddingSensitivity:BEGIN /////////////////////////////////////////
     int addInertiaLoadSensitivityToUnbalance(const Vector &accel, 
@@ -181,7 +182,7 @@ class Node : public DomainComponent
     int numberDOF;                    // number of dof at Node
     DOF_Group *theDOF_GroupPtr;       // pointer to associated DOF_Group
     Vector *Crd;                      // original nodal coords
-    Vector *commitDisp, *commitVel, *commitAccel; // commited quantities
+    Vector *commitDisp, *commitVel, *commitAccel; // committed quantities
     Vector *trialDisp, *trialVel, *trialAccel;     // trial quantities
     Vector *unbalLoad;                // unbalanced load
     Vector *incrDisp;

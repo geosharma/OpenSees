@@ -22,8 +22,8 @@
 // $Date: 2011-07-18 10:11:35 $
 // $Source: /usr/local/cvs/OpenSees/SRC/material/uniaxial/FiberSection2dThermal.h,v $
 
-//Modified by Jian Zhang, [Univeristy of Edinburgh]
-//Modified by Panagiotis Kotsovinos, [Univeristy of Edinburgh]
+//Modified by Jian Zhang, [University of Edinburgh]
+//Modified by Panagiotis Kotsovinos, [University of Edinburgh]
 
 // Description: This file contains the class definition for FiberSection2dThermal
 // FiberSection2dThermal provides the abstraction of a 2d beam section discretized by fibers.
@@ -47,10 +47,10 @@ class FiberSection2dThermal : public SectionForceDeformation
 {
   public:
     FiberSection2dThermal();
-    FiberSection2dThermal(int tag, int numFibers, Fiber **fibers);
-    FiberSection2dThermal(int tag, int num);
+    FiberSection2dThermal(int tag, int numFibers, Fiber **fibers, bool compCentroid=true);
+    FiberSection2dThermal(int tag, int num, bool compCentroid=true);
     FiberSection2dThermal(int tag, int numFibers, UniaxialMaterial **mats,
-			  SectionIntegration &si);
+			  SectionIntegration &si, bool compCentroid=true);
     ~FiberSection2dThermal();
 
     const char *getClassType(void) const {return "FiberSection2dThermal";};
@@ -108,7 +108,8 @@ class FiberSection2dThermal : public SectionForceDeformation
     double   sData[2];               // data for s vector
 
     double QzBar, ABar, yBar;       // Section centroid
-
+    bool computeCentroid;
+    
     SectionIntegration *sectionIntegr;
 
     static ID code;
@@ -125,6 +126,7 @@ class FiberSection2dThermal : public SectionForceDeformation
     double *Fiber_ElongP;
     Vector AverageThermalElong;
 	//Basiclly this data stores the last committed fiber tangent for calculating thermal foreces
+
 // AddingSensitivity:BEGIN //////////////////////////////////////////
     Vector dedh; // MHS hack
 // AddingSensitivity:END ///////////////////////////////////////////

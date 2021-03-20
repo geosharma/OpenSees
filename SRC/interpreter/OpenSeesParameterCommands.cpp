@@ -86,7 +86,7 @@ OPS_Parameter()
 	    return -1;
 	}
 
-	if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+	if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 	    opserr << "WARING: parameter - failed to set parameter tag\n";
 	    return -1;
 	}
@@ -111,7 +111,7 @@ OPS_Parameter()
 	    return -1;
 	}
 
-	if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+	if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 	    opserr << "WARING: parameter - failed to set parameter tag\n";
 	    return -1;
 	}
@@ -151,7 +151,7 @@ OPS_Parameter()
 		    return -1;
 		}
 
-		if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+		if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 		    opserr << "WARING: parameter - failed to set parameter tag\n";
 		    return -1;
 		}
@@ -197,7 +197,7 @@ OPS_Parameter()
 		    return -1;
 		}
 
-		if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+		if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 		    opserr << "WARING: parameter - failed to set parameter tag\n";
 		    return -1;
 		}
@@ -293,38 +293,14 @@ OPS_Parameter()
     if (numr > 0) {
 
 	char** argv = new char*[numr];
-
+	char buffer[128];
+	
 	for (int i=0; i<numr; ++i) {
 
 	    argv[i] = new char[128];
 
-	    double value;
-	    int val;
-	    if (OPS_GetIntInput(&num, &val) == 0) {
-
-		// convert to string
-		snprintf(argv[i], 128, "%d", val);
-
-	    } else {
-
-		// back one
-		OPS_ResetCurrentInputArg(-1);
-
-		if (OPS_GetDoubleInput(&num, &value) == 0) {
-
-		    // convert to string
-		    snprintf(argv[i], 128, "%.20f", value);
-
-		} else {
-
-		    // back one
-		    OPS_ResetCurrentInputArg(-1);
-
-		    // copy string
-		    strcpy(argv[i], OPS_GetString());
-		}
-	    }
-
+	    // Turn everything in to a string for setParameter
+	    strcpy(argv[i], OPS_GetStringFromAll(buffer, 128));
 	}
 
 	if (isele == false) {
@@ -352,7 +328,7 @@ OPS_Parameter()
 	theDomain->addParameter(newParameter);
     }
 
-    if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+    if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 	opserr << "WARING: parameter - failed to set parameter tag\n";
 	return -1;
     }
@@ -448,38 +424,13 @@ OPS_addToParameter()
     if (numr > 0) {
 
 	char** argv = new char*[numr];
-
+	char buffer[128];
+	
 	for (int i=0; i<numr; ++i) {
 
 	    argv[i] = new char[128];
 
-
-	    double value;
-	    int val;
-	    if (OPS_GetIntInput(&num, &val) == 0) {
-
-		// convert to string
-		snprintf(argv[i], 128, "%d", val);
-
-	    } else {
-
-		// back one
-		OPS_ResetCurrentInputArg(-1);
-
-		if (OPS_GetDoubleInput(&num, &value) == 0) {
-
-		    // convert to string
-		    snprintf(argv[i], 128, "%.20f", value);
-
-		} else {
-
-		    // back one
-		    OPS_ResetCurrentInputArg(-1);
-
-		    // copy string
-		    strcpy(argv[i], OPS_GetString());
-		}
-	    }
+	    strcpy(argv[i], OPS_GetStringFromAll(buffer, 128));
 	}
 
 	theParameter->addComponent(theObject,(const char **)argv,numr);
@@ -492,7 +443,7 @@ OPS_addToParameter()
 
     }
 
-    if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+    if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 	opserr << "WARING: parameter - failed to set parameter tag\n";
 	return -1;
     }
@@ -542,7 +493,7 @@ OPS_updateParameter()
 
     theDomain->updateParameter(paramTag, newValue);
 
-    if (OPS_SetIntOutput(&num, &paramTag) < 0) {
+    if (OPS_SetIntOutput(&num, &paramTag, true) < 0) {
 	opserr << "WARING: parameter - failed to set parameter tag\n";
 	return -1;
     }
@@ -564,12 +515,14 @@ int OPS_getParamTags()
 	tags.push_back(theParam->getTag());
     }
 
-    if (tags.empty()) return 0;
+    int size = 0;
+    int* data = 0;
+    if (!tags.empty()) {
+        size = (int) tags.size();
+        data = &tags[0];
+    }
 
-    int size = (int)tags.size();
-    int* data = &tags[0];
-
-    if (OPS_SetIntOutput(&size, data) < 0) {
+    if (OPS_SetIntOutput(&size, data, false) < 0) {
 	opserr << "WARNING failed to set outputs\n";
 	return -1;
     }
@@ -604,7 +557,7 @@ int OPS_getParamValue()
 
     double value = theParam->getValue();
 
-    if (OPS_SetDoubleOutput(&numdata, &value) < 0) {
+    if (OPS_SetDoubleOutput(&numdata, &value, true) < 0) {
 	opserr << "WARNING failed to set output\n";
 	return -1;
     }

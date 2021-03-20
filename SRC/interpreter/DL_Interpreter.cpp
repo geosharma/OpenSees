@@ -84,6 +84,12 @@ DL_Interpreter::getString()
     return 0;
 }
 
+const char*
+DL_Interpreter::getStringFromAll(char* buffer, int len)
+{
+    return 0;
+}
+
 int 
 DL_Interpreter::getStringCopy(char **stringPtr)
 {
@@ -97,13 +103,13 @@ DL_Interpreter::resetInput(int cArg)
 }
 
 int
-DL_Interpreter::setInt(int *, int numArgs)
+DL_Interpreter::setInt(int *, int numArgs, bool scalar)
 {
     return -1;
 }
 
 int
-DL_Interpreter::setDouble(double *, int numArgs)
+DL_Interpreter::setDouble(double *, int numArgs, bool scalar)
 {
     return -1;
 }

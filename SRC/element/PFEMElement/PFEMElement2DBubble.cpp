@@ -129,6 +129,15 @@ void* OPS_PFEMElement2DBubble(const ID &info)
             data[i] = mdata(i);
         }
 
+    } else if (info.Size()>0 && info(0)==3) {
+        if (info.Size() < 2) {
+            opserr << "WARNING: need info -- inmesh, meshtag\n";
+            return 0;
+        }
+
+        // get the data for a mesh
+        Vector& mdata = meshdata[info(1)];
+        return &mdata;
     }
 
     return new PFEMElement2DBubble(idata[0],idata[1],idata[2],idata[3],
@@ -138,7 +147,9 @@ void* OPS_PFEMElement2DBubble(const ID &info)
 // for FEM_ObjectBroker, recvSelf must invoke
 PFEMElement2DBubble::PFEMElement2DBubble()
         :Element(0, ELE_TAG_PFEMElement2DBubble), ntags(6),
-         rho(0), mu(0), bx(0), by(0), J(0.0), dJ(6), numDOFs(),thickness(1.0), kappa(-1), parameterID(0)
+         rho(0), mu(0), bx(0), by(0), J(0.0), dJ(6),
+         numDOFs(),thickness(1.0), kappa(-1), parameterID(0),
+         M(), D(), F(), Fp()
 {
     for(int i=0;i<3;i++)
     {
@@ -156,7 +167,8 @@ PFEMElement2DBubble::PFEMElement2DBubble(int tag, int nd1, int nd2, int nd3,
                                          double thk, double ka)
         :Element(tag, ELE_TAG_PFEMElement2DBubble), ntags(6),
          rho(r), mu(m), bx(b1), by(b2), J(0.0), dJ(6), numDOFs(),
-         thickness(thk), kappa(ka), parameterID(0)
+         thickness(thk), kappa(ka), parameterID(0),
+         M(), D(), F(), Fp()
 {
     ntags(0)=nd1; ntags(2)=nd2; ntags(4)=nd3;
     ntags(1)=nd1; ntags(3)=nd2; ntags(5)=nd3;
@@ -181,8 +193,6 @@ PFEMElement2DBubble::~PFEMElement2DBubble()
         }
     }
 }
-
-
 
 int
 PFEMElement2DBubble::getNumExternalNodes() const
@@ -222,6 +232,59 @@ int PFEMElement2DBubble::commitState()
 }
 
 int
+PFEMElement2DBubble::updateMatrix()
+{
+    int ndf = getNumDOF();
+    M.resize(ndf, ndf);
+    M.Zero();
+    D.resize(ndf, ndf);
+    D.Zero();
+    F.resize(6);
+    F.Zero();
+    Fp.resize(3);
+    Fp.Zero();
+
+    // mass
+    double m = getM();
+    double mp = getMp();
+    for(int a=0; a<3; a++) {
+        M(numDOFs(2*a), numDOFs(2*a)) = m;          // Mxd
+        M(numDOFs(2*a)+1, numDOFs(2*a)+1) = m;      // Myd
+
+        for(int b=0; b<3; b++) {
+            if(a == b) {
+                M(numDOFs(2*a+1), numDOFs(2*b+1)) = 2*mp;   // Mp
+            } else {
+                M(numDOFs(2*a+1), numDOFs(2*b+1)) = mp;   // Mp
+            }
+        }
+    }
+
+    // damp
+    Vector G(6);
+    getG(G);
+    Matrix L(3,3);
+    getL(L);
+    for(int a=0; a<3; a++) {
+        for(int b=0; b<3; b++) {
+            D(numDOFs(2*a+1), numDOFs(2*b)) = G(2*b);   // GxT
+            D(numDOFs(2*a+1), numDOFs(2*b)+1) = G(2*b+1); // GyT
+
+            D(numDOFs(2*a), numDOFs(2*b+1)) = -G(2*a);   // -Gx
+            D(numDOFs(2*a)+1, numDOFs(2*b+1)) = -G(2*a+1); // -Gy
+
+            D(numDOFs(2*a+1), numDOFs(2*b+1)) = L(a,b);   // bubble
+        }
+    }
+
+    // force
+    getFp(Fp);
+    getF(F);
+
+    return 0;
+}
+
+int
 PFEMElement2DBubble::update()
 {
     if (dispon) {
@@ -242,6 +305,7 @@ PFEMElement2DBubble::update()
 
     if (dispon) {
         setdJ();
+        updateMatrix();
     }
 
     return 0;
@@ -250,61 +314,13 @@ PFEMElement2DBubble::update()
 const Matrix&
 PFEMElement2DBubble::getMass()
 {
-
-    // resize K
-    int ndf = this->getNumDOF();
-    K.resize(ndf, ndf);
-    K.Zero();
-
-    double m = getM();
-    double mp = getMp();
-
-    // mass
-    for(int a=0; a<3; a++) {
-        K(numDOFs(2*a), numDOFs(2*a)) = m;          // Mxd
-        K(numDOFs(2*a)+1, numDOFs(2*a)+1) = m;      // Myd
-
-        for(int b=0; b<3; b++) {
-            if(a == b) {
-                K(numDOFs(2*a+1), numDOFs(2*b+1)) = 2*mp;   // Mp
-            } else {
-                K(numDOFs(2*a+1), numDOFs(2*b+1)) = mp;   // Mp
-            }
-        }
-    }
-
-    return K;
+    return M;
 }
 
 const Matrix&
 PFEMElement2DBubble::getDamp()
 {
-
-    // resize K
-    int ndf = this->getNumDOF();
-    K.resize(ndf, ndf);
-    K.Zero();
-
-    Vector G(6);
-    getG(G);
-    Matrix L(3,3);
-    getL(L);
-
-    // other matrices
-    for(int a=0; a<3; a++) {
-        for(int b=0; b<3; b++) {
-            // K
-            K(numDOFs(2*a+1), numDOFs(2*b)) = G(2*b);   // GxT
-            K(numDOFs(2*a+1), numDOFs(2*b)+1) = G(2*b+1); // GyT
-
-            K(numDOFs(2*a), numDOFs(2*b+1)) = -G(2*a);   // -Gx
-            K(numDOFs(2*a)+1, numDOFs(2*b+1)) = -G(2*a+1); // -Gy
-
-            K(numDOFs(2*a+1), numDOFs(2*b+1)) = L(a,b);   // bubble
-        }
-    }
-
-    return K;
+    return D;
 }
 
 const Matrix&
@@ -351,6 +367,11 @@ PFEMElement2DBubble::getResistingForce()
 const Vector&
 PFEMElement2DBubble::getResistingForceIncInertia()
 {
+    if (!dispon) {
+        if (M.noCols() == 0) {
+            updateMatrix();
+        }
+    }
 
     // resize P
     int ndf = this->getNumDOF();
@@ -376,21 +397,15 @@ PFEMElement2DBubble::getResistingForceIncInertia()
 
     }
 
-    // bubble force
-    Vector fp(3);
-    getFp(fp);
-
     // internal force
     P.addMatrixVector(1.0, getMass(), vdot, 1.0);
     P.addMatrixVector(1.0, getDamp(), v, 1.0);
 
     // external force
-    Vector F(6);
-    getF(F);
     for(int i=0; i<3; i++) {
         P(numDOFs(2*i)) -= F(2*i);
         P(numDOFs(2*i)+1) -= F(2*i+1);
-        P(numDOFs(2*i+1)) -= fp(i);
+        P(numDOFs(2*i+1)) -= Fp(i);
     }
 
     return P;
@@ -555,55 +570,33 @@ PFEMElement2DBubble::displaySelf(Renderer &theViewer, int displayMode, float fac
     }
     */
 
-    static Vector values(3);
-
-    // now  determine the end points of the Tri31 based on
+    // determine the end points of the Tri31 based on
     // the display factor (a measure of the distorted image)
     // store this information in 3 3d vectors v1 through v3
-    const Vector &end1Crd = nodes[0]->getCrds();
-    const Vector &end2Crd = nodes[2]->getCrds();
-    const Vector &end3Crd = nodes[4]->getCrds();
+    static Vector v1(3);
+    static Vector v2(3);
+    static Vector v3(3);
 
-    const int numnodes = 3;
-    static Matrix coords(numnodes,3);
+    nodes[0]->getDisplayCrds(v1, fact, displayMode);
+    nodes[2]->getDisplayCrds(v2, fact, displayMode);
+    nodes[4]->getDisplayCrds(v3, fact, displayMode);
 
-    if (displayMode >= 0) {
-
-        const Vector &end1Disp = nodes[0]->getDisp();
-        const Vector &end2Disp = nodes[2]->getDisp();
-        const Vector &end3Disp = nodes[4]->getDisp();
-
-        for (int i = 0; i < 2; i++) {
-            coords(0,i) = end1Crd(i) + end1Disp(i)*fact;
-            coords(1,i) = end2Crd(i) + end2Disp(i)*fact;
-            coords(2,i) = end3Crd(i) + end3Disp(i)*fact;
-        }
-    } else {
-        int mode = displayMode * -1;
-        const Matrix &eigen1 = nodes[0]->getEigenvectors();
-        const Matrix &eigen2 = nodes[2]->getEigenvectors();
-        const Matrix &eigen3 = nodes[4]->getEigenvectors();
-        if (eigen1.noCols() >= mode) {
-            for (int i = 0; i < 2; i++) {
-                coords(0,i) = end1Crd(i) + eigen1(i,mode-1)*fact;
-                coords(1,i) = end2Crd(i) + eigen2(i,mode-1)*fact;
-                coords(2,i) = end3Crd(i) + eigen3(i,mode-1)*fact;
-            }
-        } else {
-            for (int i = 0; i < 2; i++) {
-                coords(0,i) = end1Crd(i);
-                coords(1,i) = end2Crd(i);
-                coords(2,i) = end3Crd(i);
-            }
-        }
+    // point coordinates for polygon
+    static Matrix coords(3, 3);
+    for (int i = 0; i < 2; i++) {
+        coords(0, i) = v1(i);
+        coords(1, i) = v2(i);
+        coords(2, i) = v3(i);
     }
 
-    int error = 0;
+    // color map
+    static Vector values(3);
+    values(0) = 0.0;
+    values(1) = 0.0;
+    values(2) = 0.0;
 
     // finally we draw the element using drawPolygon
-    error += theViewer.drawPolygon (coords, values);
-
-    return error;
+    return theViewer.drawPolygon(coords, values);
 }
 
 // C = [0 0 0 1 0 -1]

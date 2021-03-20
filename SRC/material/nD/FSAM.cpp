@@ -11,24 +11,24 @@
 // Model (FSAM, Ulugtekin, 2010; Orakcal et al., 2012) which is a plane-stress 
 // constitutive model for simulating the behavior of RC panel elements under 
 // generalized, in-plane, reversed-cyclic loading conditions. The model assumes
-// perfect bond assumption between concrete and reinforcing steel bars. The 
-// reinforcing steel bars develop uniaxial stresses under strains in their 
-// longitudinal direction, the behavior of concrete is defined using stress–strain 
-// relationships in biaxial directions, the orientation of which is governed by 
-// the state of cracking in concrete, and also incorporates biaxial softening 
-// effects including compression softening and biaxial damage. For transfer of 
+// perfect bond assumption between concrete and reinforcing steel bars. The
+// reinforcing steel bars develop uniaxial stresses under strains in their
+// longitudinal direction, the behavior of concrete is defined using stress-strain
+// relationships in biaxial directions, the orientation of which is governed by
+// the state of cracking in concrete, and also incorporates biaxial softening
+// effects including compression softening and biaxial damage. For transfer of
 // shear stresses across the cracks, a friction-based elasto-plastic shear aggregate
 // interlock model is adopted, together with a linear elastic model for representing
 // dowel action on the reinforcing steel bars (Kolozvari, 2013).
 //
 // References:
-// 1) Orakcal, K., Massone L.M., Ulugtekin, D.,“Constitutive Modeling of Reinforced Concrete 
-// Panel Behavior under Cyclic Loading”, Proceedings of the 15th World Conference on 
+// 1) Orakcal, K., Massone L.M., Ulugtekin, D.,"Constitutive Modeling of Reinforced Concrete
+// Panel Behavior under Cyclic Loading", Proceedings of the 15th World Conference on
 // Earthquake Engineering, Lisbon, Portugal, 2012.
-// 2) Ulugtekin, D., “Analytical Modeling of Reinforced Concrete Panel Elements under 
-// Reversed Cyclic Loadings”, M.S. Thesis, Bogazici University, Istanbul, Turkey, 2010.
-// 3) Kolozvari K. (2013). “Analytical Modeling of Cyclic Shear-Flexure Interaction in 
-// Reinforced Concrete Structural Walls”, PhD Dissertation, University of California, Los Angeles.
+// 2) Ulugtekin, D., "Analytical Modeling of Reinforced Concrete Panel Elements under
+// Reversed Cyclic Loadings", M.S. Thesis, Bogazici University, Istanbul, Turkey, 2010.
+// 3) Kolozvari K. (2013). "Analytical Modeling of Cyclic Shear-Flexure Interaction in
+// Reinforced Concrete Structural Walls", PhD Dissertation, University of California, Los Angeles.
 //
 // Source: /usr/local/cvs/OpenSees/SRC/material/nD/reinforcedConcretePlaneStress/FSAM.h
 //
@@ -241,6 +241,7 @@ FSAM::FSAM (int tag,
 	E0y = 0.0;
 
 	Ec = 0.0;
+	fpc = 0.0;
 	epcc = 0.0;
 	et = 0.0;
 
@@ -408,7 +409,7 @@ FSAM::FSAM (int tag,
 	theResponses[0] = theMaterial[5]->setResponse(argv, 1, *theDummyStream);
 
 	if (theResponses[0] == 0) {
-			opserr << " FSAM::FSAM - failed to set appropriate materials tag: " << tag << "\n";
+			opserr << " FSAM::FSAM - failed to get cracking strain for material with tag: " << tag << "\n";
 			exit(-1);
 	}
 
@@ -416,7 +417,7 @@ FSAM::FSAM (int tag,
 	theResponses[1] = theMaterial[4]->setResponse(argv, 1, *theDummyStream);
 
 	if (theResponses[1] == 0) {
-			opserr << " FSAM::FSAM - failed to set appropriate materials tag: " << tag << "\n";
+			opserr << " FSAM::FSAM - failed to get input parameters for material with tag: " << tag << "\n";
 			exit(-1);
 	}
 
@@ -459,6 +460,9 @@ FSAM::FSAM (int tag,
 
 	// Strain at peak compressive stress for concrete
 	epcc = InputConc[2];
+	
+	// Peak compressive stress for concrete
+	fpc = InputConc[1];
 
 	// Cracking strain for concrete
 	et = InputConc[7];
@@ -809,13 +813,13 @@ const Vector& FSAM::getStrain()
 	return strain_vec;
 }
 
-// Get commited stress
+// Get committed stress
 const Vector& FSAM::getCommittedStress(void)
 {
 	return CStress;
 }
 
-// Get commited strain
+// Get committed strain
 const Vector& FSAM::getCommittedStrain(void)
 {
 	return CStrain;
@@ -1497,7 +1501,7 @@ void FSAM::Stage1(double &ex, double &ey, double &gamma)
 	tangent_matrix(2,1) = dtxydey;
 	tangent_matrix(2,2) = dtxydgamma;
 
-	// if 1st interation calculate initial stiffness
+	// if 1st iteration calculate initial stiffness
 
 	if (first_iteration == 1) {
 		tangent_matrix = this->getInitialTangent();
@@ -2516,6 +2520,13 @@ Response* FSAM::setResponse(const char **argv, int argc, OPS_Stream &theOutput)
 
 		theResponse = new MaterialResponse(this, 111, data11);
 	
+	}
+	else if (strcmp(argv[0], "getInputParameters") == 0) {
+
+		Vector data12(12);
+		data12.Zero();
+		theResponse = new MaterialResponse(this, 112, data12);
+
 	} else
 
 		return this->NDMaterial::setResponse(argv, argc, theOutput);
@@ -2559,9 +2570,31 @@ int FSAM::getResponse(int responseID, Information &matInfo)
 	} else if (responseID == 111){
 		return matInfo.setVector(this->getCrackingAngles()); 
 
+	} else if (responseID == 112) {
+		return matInfo.setVector(this->getInputParameters());
+
 	} else {
 
 	return 0;
 
 	}
+}
+
+// Function that returns input parameters - added for SFI_MVLEM_3D
+Vector FSAM::getInputParameters(void)
+{
+	Vector input_par(12); // size = max number of parameters (assigned + default)
+
+	input_par.Zero();
+
+	input_par(0) = this->getTag();
+	input_par(1) = rho;
+	input_par(2) = fpc;
+	input_par(3) = roux;
+	input_par(4) = rouy;
+	input_par(5) = nu;
+	input_par(6) = alfadow;
+	input_par(9) = Ec; // added for quadWall element
+
+	return input_par;
 }

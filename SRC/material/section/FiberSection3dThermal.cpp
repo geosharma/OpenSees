@@ -48,11 +48,12 @@
 ID FiberSection3dThermal::code(3);
 
 // constructors:
-FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers):
+FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers, bool compCentroid):
   SectionForceDeformation(tag, SEC_TAG_FiberSection3dThermal),
   numFibers(num), sizeFibers(num), theMaterials(0), matData(0),
-  QzBar(0.0), QyBar(0.0), ABar(0.0),
-  yBar(0.0), zBar(0.0), e(3), eCommit(3), s(0), ks(0), sT(0)
+  QzBar(0.0), QyBar(0.0), ABar(0.0), yBar(0.0), zBar(0.0), computeCentroid(compCentroid),
+  e(3), eCommit(3), s(0), ks(0), sT(0), Fiber_T(0), Fiber_TMax(0),
+  parameterID(0), SHVs(0)
 {
   if (numFibers != 0) {
     theMaterials = new UniaxialMaterial *[numFibers];
@@ -68,10 +69,6 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers):
       opserr << "FiberSection3dThermal::FiberSection3dThermal -- failed to allocate double array for material data\n";
       exit(-1);
     }
-
-    double Qz = 0.0;
-    double Qy = 0.0;
-    double A  = 0.0;
 
     for (int i = 0; i < numFibers; i++) {
       Fiber *theFiber = fibers[i];
@@ -94,8 +91,10 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers):
       }
     }
 
-    yBar = -QzBar/ABar;
-    zBar = QyBar/ABar;
+    if (computeCentroid) {
+      yBar = QzBar/ABar;
+      zBar = QyBar/ABar;
+    }
   }
 
   s = new Vector(sData, 3);
@@ -122,7 +121,7 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers):
   sTData[1] = 0.0;
   sTData[2] = 0.0;
 
-  //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+  //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
   Fiber_T = new double [1000];
   for (int i = 0;i<1000; i++) {
 	   Fiber_T[i] = 0;
@@ -133,12 +132,37 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num, Fiber **fibers):
    }
 }
 
-FiberSection3dThermal::FiberSection3dThermal(int tag, int num):
+FiberSection3dThermal::FiberSection3dThermal(int tag, int num, bool compCentroid):
   SectionForceDeformation(tag, SEC_TAG_FiberSection3dThermal),
   numFibers(0), sizeFibers(num), theMaterials(0), matData(0),
-  QzBar(0.0), QyBar(0.0), ABar(0.0),
-  yBar(0.0), zBar(0.0), e(3), eCommit(3), s(0), ks(0), sT(0)
+  QzBar(0.0), QyBar(0.0), ABar(0.0), yBar(0.0), zBar(0.0), computeCentroid(compCentroid),
+  e(3), eCommit(3), s(0), ks(0),
+  sT(0), Fiber_T(0), Fiber_TMax(0),
+  parameterID(0), SHVs(0)
 {
+  if(sizeFibers != 0) {
+    theMaterials = new UniaxialMaterial *[sizeFibers];
+    
+    if (theMaterials == 0) {
+      opserr << "FiberSection3dThermal::FiberSection3dThermal -- failed to allocate Material pointers\n";
+      exit(-1);
+    }
+    
+    matData = new double [sizeFibers*3];
+    
+    if (matData == 0) {
+      opserr << "FiberSection3dThermal::FiberSection3dThermal -- failed to allocate double array for material data\n";
+      exit(-1);
+    }
+    
+    for (int i = 0; i < sizeFibers; i++) {
+      matData[i*3] = 0.0;
+      matData[i*3+1] = 0.0;
+      matData[i*3+2] = 0.0;
+      theMaterials[i] = 0;
+    }
+  }
+  
   s = new Vector(sData, 3);
   ks = new Matrix(kData, 3, 3);
 
@@ -163,7 +187,7 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num):
   sTData[1] = 0.0;
   sTData[2] = 0.0;
 
-  //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+  //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
   Fiber_T = new double [1000];
   for (int i = 0;i<1000; i++) {
 	   Fiber_T[i] = 0;
@@ -178,8 +202,10 @@ FiberSection3dThermal::FiberSection3dThermal(int tag, int num):
 FiberSection3dThermal::FiberSection3dThermal():
   SectionForceDeformation(0, SEC_TAG_FiberSection3dThermal),
   numFibers(0), sizeFibers(0), theMaterials(0), matData(0),
-  QzBar(0.0), QyBar(0.0), ABar(0.0),
-  yBar(0.0), zBar(0.0), e(3), eCommit(3), s(0), ks(0)
+  QzBar(0.0), QyBar(0.0), ABar(0.0), yBar(0.0), zBar(0.0), computeCentroid(true),
+  e(3), eCommit(3), s(0), ks(0),
+  sT(0), Fiber_T(0), Fiber_TMax(0),
+  parameterID(0), SHVs(0)
 {
   s = new Vector(sData, 3);
   ks = new Matrix(kData, 3, 3);
@@ -206,7 +232,7 @@ FiberSection3dThermal::FiberSection3dThermal():
   sTData[1] = 0.0;
   sTData[2] = 0.0;
 
-  //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+  //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
   Fiber_T = new double [1000];
   for (int i = 0;i<1000; i++) {
 	   Fiber_T[i] = 0;
@@ -277,13 +303,15 @@ FiberSection3dThermal::addFiber(Fiber &newFiber)
   numFibers++;
 
   // Recompute centroid
-  ABar  += Area;
-  QzBar += yLoc*Area;
-  QyBar += zLoc*Area;
-
-  yBar = QzBar/ABar;
-  zBar = QyBar/ABar;
-
+  if (computeCentroid) {
+    ABar  += Area;
+    QzBar += yLoc*Area;
+    QyBar += zLoc*Area;
+    
+    yBar = QzBar/ABar;
+    zBar = QyBar/ABar;
+  }
+  
   return 0;
 }
 
@@ -312,6 +340,11 @@ FiberSection3dThermal::~FiberSection3dThermal()
     delete sT;
   //if (TemperatureTangent != 0)
     //delete [] TemperatureTangent;
+
+  if (Fiber_T != 0)
+    delete [] Fiber_T;
+  if (Fiber_TMax != 0)
+    delete [] Fiber_TMax;  
 }
 
 int
@@ -537,8 +570,8 @@ FiberSection3dThermal::getTemperatureStress(const Vector& dataMixed)
       sTData[1] += FiberForce*(matData[3*i] - yBar);
 	  sTData[2] += FiberForce*(matData[3*i+1] - zBar);
   }
-  double ThermalMoment;
-  ThermalMoment = abs(sTData[1]);
+  //double ThermalMoment;
+  //ThermalMoment = abs(sTData[1]);
  // sTData[1] = ThermalMoment;
 
   return *sT;
@@ -586,9 +619,13 @@ FiberSection3dThermal::getCopy(void)
 
   theCopy->eCommit = eCommit;
   theCopy->e = e;
+  theCopy->QzBar = QzBar;
+  theCopy->QyBar = QyBar;
+  theCopy->ABar = ABar;  
   theCopy->yBar = yBar;
   theCopy->zBar = zBar;
-
+  theCopy->computeCentroid = computeCentroid;
+  
   for (int i=0; i<9; i++)
     theCopy->kData[i] = kData[i];
 
@@ -742,6 +779,7 @@ FiberSection3dThermal::sendSelf(int commitTag, Channel &theChannel)
   static ID data(3);
   data(0) = this->getTag();
   data(1) = numFibers;
+  data(2) = computeCentroid ? 1 : 0; // Now the ID data is really 3
   int dbTag = this->getDbTag();
   res += theChannel.sendID(dbTag, commitTag, data);
   if (res < 0) {
@@ -880,23 +918,30 @@ FiberSection3dThermal::recvSelf(int commitTag, Channel &theChannel,
       res += theMaterials[i]->recvSelf(commitTag, theChannel, theBroker);
     }
 
-    double Qz = 0.0;
-    double Qy = 0.0;
-    double A  = 0.0;
-    double yLoc, zLoc, Area;
+    QzBar = 0.0;
+    QyBar = 0.0;
+    ABar = 0.0;
 
+    computeCentroid = data(2) ? true : false;
+    
     // Recompute centroid
-    for (i = 0; i < numFibers; i++) {
-      yLoc = -matData[3*i];
+    double yLoc, zLoc, Area;    
+    for (i = 0; computeCentroid && i < numFibers; i++) {
+      yLoc = matData[3*i];
       zLoc = matData[3*i+1];
       Area = matData[3*i+2];
-      A  += Area;
-      Qz += yLoc*Area;
-      Qy += zLoc*Area;
+      ABar  += Area;
+      QzBar += yLoc*Area;
+      QyBar += zLoc*Area;
     }
 
-    yBar = -Qz/A;
-    zBar = Qy/A;
+    if (computeCentroid) {
+      yBar = QzBar/ABar;
+      zBar = QyBar/ABar;
+    } else {
+      yBar = 0.0;
+      zBar = 0.0;
+    }
   }
 
   return res;
@@ -914,7 +959,7 @@ FiberSection3dThermal::Print(OPS_Stream &s, int flag)
     s << "\nFiberSection3dThermal, tag: " << this->getTag() << endln;
     s << "\tSection code: " << code;
     s << "\tNumber of Fibers: " << numFibers << endln;
-    s << "\tCentroid: (" << -yBar << ", " << zBar << ')' << endln;
+    s << "\tCentroid: (" << yBar << ", " << zBar << ')' << endln;
 
     if (flag == 1) {
       for (int i = 0; i < numFibers; i++) {
@@ -1056,7 +1101,7 @@ FiberSection3dThermal::setResponse(const char **argv, int argc, OPS_Stream &outp
     int numData = numFibers*5;
     for (int j = 0; j < numFibers; j++) {
       output.tag("FiberOutput");
-      output.attr("yLoc", -matData[3*j]);
+      output.attr("yLoc", matData[3*j]);
       output.attr("zLoc", matData[3*j+1]);
       output.attr("area", matData[3*j+2]);
       output.tag("ResponseType","yCoord");
@@ -1149,7 +1194,7 @@ FiberSection3dThermal::setResponse(const char **argv, int argc, OPS_Stream &outp
 
       if (key < numFibers && key >= 0) {
 	output.tag("FiberOutput");
-	output.attr("yLoc",-matData[3*key]);
+	output.attr("yLoc",matData[3*key]);
 	output.attr("zLoc",matData[3*key+1]);
 	output.attr("area",matData[3*key+2]);
 
@@ -1198,7 +1243,7 @@ FiberSection3dThermal::setParameter(const char **argv, int argc, Parameter &para
     return -1;
 
 
-  int result = 0;
+  int result = -1;
 
   // A material parameter
   if (strstr(argv[0],"material") != 0) {
@@ -1257,7 +1302,6 @@ FiberSection3dThermal::getStressResultantSensitivity(int gradIndex, bool conditi
 
 
   for (int i = 0; i < numFibers; i++) {
-    UniaxialMaterial *theMat = theMaterials[i];
     double y = matData[loc++] - yBar;
     double z = matData[loc++] - zBar;
     double A = matData[loc++];
@@ -1303,16 +1347,13 @@ FiberSection3dThermal::commitSensitivity(const Vector& defSens, int gradIndex, i
   double d2 = defSens(2);
 
   for (int i = 0; i < numFibers; i++) {
-    UniaxialMaterial *theMat = theMaterials[i];
    	double y = matData[loc++] - yBar;
 	double z = matData[loc++] - zBar;
 	loc++;   // skip A data.
 
 	double strainSens = d0 + y*d1 + z*d2;
 
-
-
-	theMat->commitSensitivity(strainSens,gradIndex,numGrads);
+	theMaterials[i]->commitSensitivity(strainSens,gradIndex,numGrads);
   }
 
   return 0;
@@ -1391,7 +1432,7 @@ FiberSection3dThermal::determineFiberTemperature(const Vector& DataMixed, double
 			return 0;
 		}
 
-	//caculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
+	//calculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
 	//first for bottom flange if existing
 		if (  fiberLocy <= dataTempe[1])
 		{

@@ -18,8 +18,8 @@
 **                                                                    **
 ** ****************************************************************** */
 
-//Modified by Jian Zhang, [Univeristy of Edinburgh]
-//Modified by Panagiotis Kotsovinos, [Univeristy of Edinburgh]
+//Modified by Jian Zhang, [University of Edinburgh]
+//Modified by Panagiotis Kotsovinos, [University of Edinburgh]
 //Modified by Liming Jiang, [University of Edinburgh]
 
 // Description: This file contains the class implementation of FiberSection2dThermal.
@@ -64,10 +64,13 @@ void* OPS_FiberSection2dThermal()
 }
 
 // constructors:
-FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers):
+FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers, bool compCentroid):
   SectionForceDeformation(tag, SEC_TAG_FiberSection2dThermal),
-  numFibers(num), sizeFibers(num), theMaterials(0), matData(0),DataMixed(27),AverageThermalElong(2), QzBar(0.0), ABar(0.0),
-  yBar(0.0), sectionIntegr(0), e(2), eCommit(2), s(0), ks(0), dedh(2), sT(0)//,theTemperatures(temperatures),theTemperatureFactor(0)
+  numFibers(num), sizeFibers(num), theMaterials(0), matData(0),
+  QzBar(0.0), ABar(0.0), yBar(0.0), computeCentroid(compCentroid),
+  sectionIntegr(0), e(2), eCommit(2), s(0), ks(0),
+  DataMixed(27), sT(0), Fiber_Tangent(0), Fiber_ElongP(0), AverageThermalElong(2),
+  dedh(2)//,theTemperatures(temperatures),theTemperatureFactor(0)
 {
   if (numFibers != 0) {
     theMaterials = new UniaxialMaterial *[numFibers];
@@ -83,10 +86,6 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers):
       opserr << "FiberSection2dThermal::FiberSection2dThermal -- failed to allocate double array for material data\n";
       exit(-1);
     }
-
-
-    double Qz = 0.0;
-    double A  = 0.0;
 
     for (int i = 0; i < numFibers; i++) {
       Fiber *theFiber = fibers[i];
@@ -106,7 +105,8 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers):
       }
     }
 
-    yBar = QzBar/ABar;
+    if (computeCentroid)
+      yBar = QzBar/ABar;
   }
 
   s = new Vector(sData, 2);
@@ -128,7 +128,7 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers):
   sTData[1] = 0.0;
   sT = new Vector(sTData,2);
 
- //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+ //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
    Fiber_Tangent = new double [1000];
   for (int i = 0;i<1000; i++) {
 	   Fiber_Tangent[i] = 0;
@@ -140,12 +140,13 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, Fiber **fibers):
 }
 
 // allocate memory for fibers
-FiberSection2dThermal::FiberSection2dThermal(int tag, int num):
+FiberSection2dThermal::FiberSection2dThermal(int tag, int num, bool compCentroid):
   SectionForceDeformation(tag, SEC_TAG_FiberSection2dThermal),
   numFibers(0), sizeFibers(num), theMaterials(0), matData(0),
-  DataMixed(27),AverageThermalElong(2),
-  QzBar(0.0), ABar(0.0), yBar(0.0),
-  sectionIntegr(0), e(2), eCommit(2), s(0), ks(0), dedh(2), sT(0)
+  QzBar(0.0), ABar(0.0), yBar(0.0), computeCentroid(compCentroid),
+  sectionIntegr(0), e(2), eCommit(2), s(0), ks(0),
+  DataMixed(27), sT(0), Fiber_Tangent(0), Fiber_ElongP(0), AverageThermalElong(2),
+  dedh(2)
 {
     if(sizeFibers > 0) {
 	theMaterials = new UniaxialMaterial *[sizeFibers];
@@ -188,7 +189,7 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num):
     sTData[1] = 0.0;
     sT = new Vector(sTData,2);
 
-    //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+    //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
     Fiber_Tangent = new double [1000];
     for (int i = 0;i<1000; i++) {
 	Fiber_Tangent[i] = 0;
@@ -201,10 +202,13 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num):
 
 
 FiberSection2dThermal::FiberSection2dThermal(int tag, int num, UniaxialMaterial **mats,
-			       SectionIntegration &si):
+					     SectionIntegration &si, bool compCentroid):
   SectionForceDeformation(tag, SEC_TAG_FiberSection2dThermal),
-  numFibers(num), sizeFibers(num), theMaterials(0), matData(0),DataMixed(27),AverageThermalElong(2),
-  yBar(0.0), sectionIntegr(0), e(2), eCommit(2), s(0), ks(0), dedh(2)//,theTemperature(0)
+  numFibers(num), sizeFibers(num), theMaterials(0), matData(0),
+  QzBar(0.0), ABar(0.0), yBar(0.0), computeCentroid(compCentroid),
+  sectionIntegr(0), e(2), eCommit(2), s(0), ks(0),
+  DataMixed(27), sT(0), Fiber_Tangent(0), Fiber_ElongP(0), AverageThermalElong(2),
+  dedh(2)//,theTemperature(0)
 {
   if (numFibers != 0) {
     theMaterials = new UniaxialMaterial *[numFibers];
@@ -233,9 +237,6 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, UniaxialMaterial 
   double fiberArea[10000];
   sectionIntegr->getFiberWeights(numFibers, fiberArea);
 
-  double Qz = 0.0;
-  double A  = 0.0;
-
   for (int i = 0; i < numFibers; i++) {
 
     ABar  += fiberArea[i];
@@ -249,7 +250,8 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, UniaxialMaterial 
     }
   }
 
-  yBar = QzBar/ABar;
+  if (computeCentroid)
+    yBar = QzBar/ABar;
 
   s = new Vector(sData, 2);
   ks = new Matrix(kData, 2, 2);
@@ -270,7 +272,7 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, UniaxialMaterial 
    sTData[0] = 0.0;
    sTData[1] = 0.0;
 
- //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+ //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
      Fiber_Tangent = new double [1000];
   for (int i = 0;i<1000; i++) {
 	   Fiber_Tangent[i] = 0;
@@ -285,8 +287,11 @@ FiberSection2dThermal::FiberSection2dThermal(int tag, int num, UniaxialMaterial 
 // constructor for blank object that recvSelf needs to be invoked upon
 FiberSection2dThermal::FiberSection2dThermal():
   SectionForceDeformation(0, SEC_TAG_FiberSection2dThermal),
-  numFibers(0), sizeFibers(0), theMaterials(0), matData(0),DataMixed(27),AverageThermalElong(2),
-  yBar(0.0), sectionIntegr(0), e(2), eCommit(2), s(0), ks(0), dedh(2)//, theTemperatures(0),theTemperatureFactor(0)
+  numFibers(0), sizeFibers(0), theMaterials(0), matData(0),
+  QzBar(0.0), ABar(0.0), yBar(0.0), computeCentroid(true),
+  sectionIntegr(0), e(2), eCommit(2), s(0), ks(0),
+  DataMixed(27), Fiber_Tangent(0), Fiber_ElongP(0), AverageThermalElong(2),
+  dedh(2)//, theTemperatures(0),theTemperatureFactor(0)
 {
   s = new Vector(sData, 2);
   ks = new Matrix(kData, 2, 2);
@@ -308,7 +313,7 @@ FiberSection2dThermal::FiberSection2dThermal():
    sTData[1] = 0.0;
 
 
-   //An array storing the current fiber Temperature and Maximum Temperature and intializing it.
+   //An array storing the current fiber Temperature and Maximum Temperature and initializing it.
    Fiber_Tangent = new double [1000];
    for(int i = 0;i<1000; i++) {
 	   Fiber_Tangent[i] = 0;
@@ -378,10 +383,12 @@ FiberSection2dThermal::addFiber(Fiber &newFiber)
     numFibers++;
 
     // Recompute centroid
-    ABar += Area;
-    QzBar += yLoc*Area;
-    yBar = QzBar/ABar;
-
+    if (computeCentroid) {
+      ABar += Area;
+      QzBar += yLoc*Area;
+      yBar = QzBar/ABar;
+    }
+    
     return 0;
 }
 
@@ -468,7 +475,7 @@ FiberSection2dThermal::setTrialSectionDeformation(const Vector& deforms)
 		}
 		else
 		{
-			//caculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
+			//calculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
 			Vector TempV= this->determineFiberTemperature( DataMixed, fiberLocs[i]);
 			FiberTemperature = TempV(0);
 			FiberTempMax= TempV(1);
@@ -623,7 +630,7 @@ FiberSection2dThermal::getTemperatureStress(const Vector &dataMixed)
     }
     else
 	{
-		//caculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
+		//calculate the fiber tempe, T=T1-(Y-Y1)*(T1-T2)/(Y1-Y2)
 		Vector TempV= this->determineFiberTemperature( dataMixed, fiberLocs[i]);
 		FiberTemperature = TempV(0);FiberTempMax= TempV(1);
 	}
@@ -733,6 +740,8 @@ FiberSection2dThermal::getCopy(void)
   theCopy->sData[0] = sData[0];
   theCopy->sData[1] = sData[1];
 
+  theCopy->computeCentroid = computeCentroid;
+  
   if (sectionIntegr != 0)
     theCopy->sectionIntegr = sectionIntegr->getCopy();
   else
@@ -879,6 +888,7 @@ FiberSection2dThermal::sendSelf(int commitTag, Channel &theChannel)
   static ID data(3);
   data(0) = this->getTag();
   data(1) = numFibers;
+  data(2) = computeCentroid ? 1 : 0; // Now the ID data is really 3  
   int dbTag = this->getDbTag();
   res += theChannel.sendID(dbTag, commitTag, data);
   if (res < 0) {
@@ -1019,6 +1029,8 @@ FiberSection2dThermal::recvSelf(int commitTag, Channel &theChannel,
     double A  = 0.0;
     double yLoc, Area;
 
+    computeCentroid = data(2) ? true : false;
+    
     // Recompute centroid
     for (i = 0; i < numFibers; i++) {
       yLoc = matData[2*i];
@@ -1027,7 +1039,10 @@ FiberSection2dThermal::recvSelf(int commitTag, Channel &theChannel,
       Qz += yLoc*Area;
     }
 
-    yBar = Qz/A;
+    if (computeCentroid)
+      yBar = Qz/A;
+    else
+      yBar = 0.0;
   }
 
   return res;
@@ -1303,11 +1318,12 @@ FiberSection2dThermal::setParameter(const char **argv, int argc, Parameter &para
   }
 
   // Check if it belongs to the section integration
-  else if (strstr(argv[0],"integration") != 0)
+  if (strstr(argv[0],"integration") != 0) {
     if (sectionIntegr != 0)
       return sectionIntegr->setParameter(&argv[1], argc-1, param);
     else
       return -1;
+  }
 
   int ok = 0;
 

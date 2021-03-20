@@ -684,7 +684,7 @@ Node::setTrialDisp(double value, int dof)
 {
     // check vector arg is of correct size
     if (dof < 0 || dof >=  numberDOF) {
-      opserr << "WARNING Node::setTrialDisp() - incompatable sizes\n";
+      opserr << "WARNING Node::setTrialDisp() - incompatible sizes\n";
       opserr << "node: " << this->getTag() << endln;
       return -2;
     }    
@@ -699,7 +699,7 @@ Node::setTrialDisp(double value, int dof)
 	}    
     }
 
-    // perform the assignment .. we dont't go through Vector interface
+    // perform the assignment .. we don't go through Vector interface
     // as we are sure of size and this way is quicker
     double tDisp = value;
     disp[dof+2*numberDOF] = tDisp - disp[dof+numberDOF];
@@ -714,7 +714,7 @@ Node::setTrialDisp(const Vector &newTrialDisp)
 {
     // check vector arg is of correct size
     if (newTrialDisp.Size() != numberDOF) {
-      opserr << "WARNING Node::setTrialDisp() - incompatable sizes\n";
+      opserr << "WARNING Node::setTrialDisp() - incompatible sizes\n";
       opserr << "node: " << this->getTag() << endln;
       return -2;
     }    
@@ -729,7 +729,7 @@ Node::setTrialDisp(const Vector &newTrialDisp)
 	}    
     }
 
-    // perform the assignment .. we dont't go through Vector interface
+    // perform the assignment .. we don't go through Vector interface
     // as we are sure of size and this way is quicker
     for (int i=0; i<numberDOF; i++) {
         double tDisp = newTrialDisp(i);
@@ -746,7 +746,7 @@ Node::setTrialVel(const Vector &newTrialVel)
 {
     // check vector arg is of correct size
     if (newTrialVel.Size() != numberDOF) {
-	    opserr << "WARNING Node::setTrialVel() - incompatable sizes\n";
+	    opserr << "WARNING Node::setTrialVel() - incompatible sizes\n";
 	    return -2;
     }    
 
@@ -772,7 +772,7 @@ Node::setTrialAccel(const Vector &newTrialAccel)
 {
     // check vector arg is of correct size
     if (newTrialAccel.Size() != numberDOF) {
-	    opserr << "WARNING Node::setTrialAccel() - incompatable sizes\n";
+	    opserr << "WARNING Node::setTrialAccel() - incompatible sizes\n";
 	    return -2;
     }    
 
@@ -796,11 +796,11 @@ Node::incrTrialDisp(const Vector &incrDispl)
 {
     // check vector arg is of correct size
     if (incrDispl.Size() != numberDOF) {
-	opserr << "WARNING Node::incrTrialDisp() - incompatable sizes\n";
+	opserr << "WARNING Node::incrTrialDisp() - incompatible sizes\n";
 	return -2;
     }    
 
-    // create a copy if no trial exists andd add committed
+    // create a copy if no trial exists and add committed
     if (trialDisp == 0) {
 	if (this->createDisp() < 0) {
 	    opserr << "FATAL Node::incrTrialDisp() - ran out of memory\n";
@@ -832,7 +832,7 @@ Node::incrTrialVel(const Vector &incrVel)
 {
     // check vector arg is of correct size
     if (incrVel.Size() != numberDOF) {
-	opserr << "WARNING Node::incrTrialVel() - incompatable sizes\n";
+	opserr << "WARNING Node::incrTrialVel() - incompatible sizes\n";
 	return -2;
     }    
 
@@ -861,11 +861,11 @@ Node::incrTrialAccel(const Vector &incrAccel)
 {
     // check vector arg is of correct size
     if (incrAccel.Size() != numberDOF) {
-	opserr << "WARNING Node::incrTrialAccel() - incompatable sizes\n";
+	opserr << "WARNING Node::incrTrialAccel() - incompatible sizes\n";
 	return -2;
     }    
 
-    // create a copy if no trial exists andd add committed    
+    // create a copy if no trial exists and add committed    
     if (trialAccel == 0) {
 	if (this->createAccel() < 0) {
 	    opserr << "FATAL Node::incrTrialAccel() - ran out of memory\n";
@@ -1221,7 +1221,7 @@ Node::setMass(const Matrix &newMass)
 {
     // check right size
     if (newMass.noRows() != numberDOF || newMass.noCols() != numberDOF) {
-	opserr << "Node::setMass - incompatable matrices\n";
+	opserr << "Node::setMass - incompatible matrices\n";
 	return -1;
     }	
 
@@ -1325,7 +1325,7 @@ Node::getRV(const Vector &V)
     
     // check dimesions of R and V
     if (R->noCols() != V.Size()) {
-	opserr << "WARNING Node::getRV() - R and V of incompatable dimesions\n";
+	opserr << "WARNING Node::getRV() - R and V of incompatible dimesions\n";
 	opserr << "R: " << *R << "V: " << V;
 	unbalLoadWithInertia->Zero();
 	return *unbalLoadWithInertia;
@@ -1494,7 +1494,7 @@ Node::sendSelf(int cTag, Channel &theChannel)
 	}
     }
 
-    // if get here succesfull
+    // if get here successful
     return 0;
 }
 
@@ -1552,7 +1552,7 @@ Node::recvSelf(int cTag, Channel &theChannel,
 
       // set the trial quantities equal to committed
       for (int i=0; i<numberDOF; i++)
-	disp[i] = disp[i+numberDOF];  // set trial equal commited
+	disp[i] = disp[i+numberDOF];  // set trial equal committed
 
     } else if (commitDisp != 0) {
       // if going back to initial we will just zero the vectors
@@ -1574,7 +1574,7 @@ Node::recvSelf(int cTag, Channel &theChannel,
 
       // set the trial quantity
       for (int i=0; i<numberDOF; i++)
-	vel[i] = vel[i+numberDOF];  // set trial equal commited
+	vel[i] = vel[i+numberDOF];  // set trial equal committed
     }
 
     if (data(4) == 0) {
@@ -1590,7 +1590,7 @@ Node::recvSelf(int cTag, Channel &theChannel,
       
       // set the trial values
       for (int i=0; i<numberDOF; i++)
-	accel[i] = accel[i+numberDOF];  // set trial equal commited
+	accel[i] = accel[i+numberDOF];  // set trial equal committed
     }
 
     if (data(5) == 0) {
@@ -1728,26 +1728,27 @@ Node::Print(OPS_Stream &s, int flag)
 }
   
 int
-Node::displaySelf(Renderer &theRenderer, int displayMode, float fact)
+Node::displaySelf(Renderer &theRenderer, int theEleMode, int theNodeMode, float fact)
 {
 
-  if (displayMode == 0)
+  if (theNodeMode == 0)
     return 0;
 
 //  const Vector &theDisp = this->getDisp();
   static Vector position(3);
 
-  this->getDisplayCrds(position, fact, displayMode);
+// display coordinates should be based on eleMode, not on nodeMode - ambaker1
+  this->getDisplayCrds(position, fact, theEleMode);
   
-  if (displayMode == -1) { 
+  if (theNodeMode == -1) {
     // draw a text string containing tag
     static char theText[20];
     sprintf(theText,"%d",this->getTag());
     return theRenderer.drawText(position, theText, (int) strlen(theText));
 
-  } else if (displayMode > 0) {
+  } else if (theNodeMode > 0) {
     // draw a point - pixel size equals displayMode tag
-    return theRenderer.drawPoint(position, 0.0, this->getTag(), 0, displayMode);
+    return theRenderer.drawPoint(position, 0.0, this->getTag(), 0, theNodeMode);
   }
 
 
@@ -2244,49 +2245,76 @@ Node::setCrds(const Vector &newCrds)
 }
 
 int
+Node::getDisplayRots(Vector& res, double fact, int mode)
+{
+    int ndm = Crd->Size();
+    int resSize = res.Size();
+    int nRotDOFs = numberDOF - ndm;
+    if (resSize < nRotDOFs)
+        return -1;
+
+    if (mode < 0) {
+        int eigenMode = -mode;
+        for (int i = ndm; i < resSize; i++)
+            res(i) = (*theEigenvectors)(i, eigenMode - 1) * fact;
+    }
+    else {
+        for (int i = ndm; i < resSize; i++)
+            res(i) = (*commitDisp)(i) * fact;
+    }
+
+    // zero rest
+    for (int i = nRotDOFs; i < resSize; i++)
+        res(i) = 0;
+
+    return 0;
+}
+
+int
 Node::getDisplayCrds(Vector &res, double fact, int mode) 
 {
-  int ndm = Crd->Size();
-  int resSize = res.Size();
+    // Get all DOFs
+    int ndm = Crd->Size();
+    int resSize = res.Size();
 
-  if (resSize < ndm)
-    return -1;
+    if (resSize < ndm)
+        return -1;
 
-  if (mode < 0) {
-    int eigenMode = -mode;
-    if ((theEigenvectors != 0) && ((*theEigenvectors).noCols() > eigenMode)) {
-      if (displayLocation != 0)
-	for (int i=0; i<ndm; i++)
-	  res(i) = (*displayLocation)(i)+(*theEigenvectors)(i,eigenMode-1)*fact;
-      else
-	for (int i=0; i<ndm; i++)
-	  res(i) = (*Crd)(i)+(*theEigenvectors)(i,eigenMode-1)*fact;
+    if (mode < 0) {
+        int eigenMode = -mode;
+        if ((theEigenvectors != 0) && ((*theEigenvectors).noCols() >= eigenMode)) {
+            if (displayLocation != 0)
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*displayLocation)(i) + (*theEigenvectors)(i, eigenMode - 1) * fact;
+            else
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*Crd)(i) + (*theEigenvectors)(i, eigenMode - 1) * fact;
+        }
     }
-  } else {    
-  
-    if (commitDisp != 0) {
-      if (displayLocation != 0)
-	for (int i=0; i<ndm; i++)
-	  res(i) = (*displayLocation)(i)+(*commitDisp)(i)*fact;
-      else
-      for (int i=0; i<ndm; i++)
-	res(i) = (*Crd)(i)+(*commitDisp)(i)*fact;
-    } else {
-      if (displayLocation != 0)
-	for (int i=0; i<ndm; i++)
-	  res(i) = (*displayLocation)(i);
-      else
-	for (int i=0; i<ndm; i++)
-	  res(i) = (*Crd)(i);
+    else {
+        if (commitDisp != 0) {
+            if (displayLocation != 0)
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*displayLocation)(i) + (*commitDisp)(i) * fact;
+            else
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*Crd)(i) + (*commitDisp)(i) * fact;
+        }
+        else {
+            if (displayLocation != 0)
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*displayLocation)(i);
+            else
+                for (int i = 0; i < ndm; i++)
+                    res(i) = (*Crd)(i);
+        }
     }
-    
-  }
 
-  // zero rest
-  for (int i=ndm; i<resSize; i++)
-    res(i) = 0;
+    // zero rest
+    for (int i = ndm; i < resSize; i++)
+        res(i) = 0;
 
-  return 0;
+    return 0;
 }
 
 int

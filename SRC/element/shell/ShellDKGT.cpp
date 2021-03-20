@@ -27,6 +27,9 @@
 // Three node flat shell element with membrane and drill DOF
 // Ref: Plate Bending Part - DKT, thin plate element
 //      Membrane Part - GT9, a membrane element with drilling DOF
+//
+
+/// Jose Abell added support for self weight 
 
 #include <stdio.h> 
 #include <stdlib.h> 
@@ -54,6 +57,8 @@ using namespace std;
 #include <Channel.h>
 #include <FEM_ObjectBroker.h>
 #include <elementAPI.h>
+
+#include <ElementalLoad.h>
 
 #define min(a,b) ( (a)<(b) ? (a):(b) )
 
@@ -90,8 +95,22 @@ OPS_ShellDKGT(void)
     return 0;
   }
   
+
+    double b_data[3] = {0, 0, 0};
+
+    int num_remaining_args = OPS_GetNumRemainingInputArgs();
+    if (num_remaining_args > 3) {
+        num_remaining_args = 3;
+    }
+    if (num_remaining_args > 0) {
+        if (OPS_GetDoubleInput(&num_remaining_args, b_data) < 0) {
+            opserr << "WARNING: invalid double b_data\n";
+            return 0;
+        }
+    }
+
   theElement = new ShellDKGT(iData[0], iData[1], iData[2], iData[3],
-			       *theSection);
+                               *theSection, b_data[0], b_data[1], b_data[2]);
 
   return theElement;
 }
@@ -147,6 +166,10 @@ connectedExternalNodes(3), load(0), Ki(0)
   wg[1] =wg2;
   wg[2] =wg2;
   wg[3] =wg2;
+
+    b[0] = 0;
+    b[1] = 0;
+    b[2] = 0;
  
 }
 
@@ -157,7 +180,7 @@ ShellDKGT::ShellDKGT(  int tag,
                          int node1,
                          int node2,
    	                     int node3,
-	                     SectionForceDeformation &theMaterial ) :
+                       SectionForceDeformation &theMaterial, double b1, double b2, double b3 ) :
 Element( tag, ELE_TAG_ShellDKGT ),
 connectedExternalNodes(3), load(0), Ki(0)
 {
@@ -198,6 +221,10 @@ connectedExternalNodes(3), load(0), Ki(0)
   wg[2] = wg2;
   wg[3] = wg2;
   
+
+    b[0] = b1;
+    b[1] = b2;
+    b[2] = b3;
 
  }
 //******************************************************************
@@ -815,6 +842,10 @@ void  ShellDKGT::zeroLoad( )
   if (load != 0)
     load->Zero();
  
+    appliedB[0] = 0.0;
+    appliedB[1] = 0.0;
+    appliedB[2] = 0.0;
+
   return ;
 }
 
@@ -822,6 +853,18 @@ void  ShellDKGT::zeroLoad( )
 int 
 ShellDKGT::addLoad(ElementalLoad *theLoad, double loadFactor)
 {
+    int type;
+    const Vector &data = theLoad->getData(type, loadFactor);
+
+    if (type == LOAD_TAG_SelfWeight) {
+        // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
+        applyLoad = 1;
+        appliedB[0] += loadFactor * data(0) ;
+        appliedB[1] += loadFactor * data(1) ;
+        appliedB[2] += loadFactor * data(2) ;
+        return 0;
+    }
+
   opserr << "ShellDKGT::addLoad - load type unknown for ele with tag: " << this->getTag() << endln;
   return -1;
 }
@@ -1261,7 +1304,10 @@ ShellDKGT::formResidAndTangent( int tang_flag )
 			residJ.addMatrixVector(0.0,TmatTran,residJ1,1.0);
 
 			for(p=0; p<ndf; p++)
+            {
 				resid(jj+p) += residJ(p);
+            }
+
 
 			//BJtranD = BJtran *dd;
 			//BJtranD.addMatrixProduct(0.0,BJtran,dd,1.0);
@@ -1311,6 +1357,50 @@ ShellDKGT::formResidAndTangent( int tang_flag )
 	}//end for i gauss loop
 
 	
+      if(applyLoad == 1)
+      {
+          const int numberGauss = 4 ;
+          const int nShape = 3 ;
+          const int numberNodes = 4 ;
+          const int massIndex = nShape - 1 ;
+          double temp, rhoH;
+          //If defined, apply self-weight
+          static Vector momentum(ndf) ;
+          double ddvol = 0;
+          for ( i = 0; i < numberGauss; i++ ) {
+
+              //get shape functions    
+              // shape2d( sg[i], tg[i], xl, shp, xsj ) ;
+              shape2d( sg[i], tg[i], qg[i], xl, shp, xsj, sx) ;
+
+              //volume element to also be saved
+              ddvol = wg[i] * xsj ;  
+
+
+              //node loop to compute accelerations
+              momentum.Zero( ) ;
+              momentum(0) = appliedB[0];
+              momentum(1) = appliedB[1];
+              momentum(2) = appliedB[2];
+
+                
+              //density
+              rhoH = materialPointers[i]->getRho() ;
+
+              //multiply acceleration by density to form momentum
+              momentum *= rhoH ;
+
+
+              //residual and tangent calculations node loops
+              for ( j=0, jj=0; j<numberNodes; j++, jj+=ndf ) {
+
+                temp = shp[massIndex][j] * ddvol ;
+
+                for ( p = 0; p < 3; p++ )
+                  resid( jj+p ) += ( temp * momentum(p) ) ;
+              }
+          }
+      }
 
 	return;
 
@@ -1642,77 +1732,41 @@ int  ShellDKGT::recvSelf (int commitTag,
 //**************************************************************************
 
 int
-ShellDKGT::displaySelf(Renderer &theViewer, int displayMode, float fact)
+ShellDKGT::displaySelf(Renderer &theViewer, int displayMode, float fact, const char** displayModes, int numModes)
 {
+	// get the end point display coords
+	static Vector v1(3);
+	static Vector v2(3);
+	static Vector v3(3);
+	nodePointers[0]->getDisplayCrds(v1, fact, displayMode);
+	nodePointers[1]->getDisplayCrds(v2, fact, displayMode);
+	nodePointers[2]->getDisplayCrds(v3, fact, displayMode);
 
-    // first determine the end points of the quad based on
-    // the display factor (a measure of the distorted image)
-    // store this information in 4 3d vectors v1 through v4
-    const Vector &end1Crd = nodePointers[0]->getCrds();
-    const Vector &end2Crd = nodePointers[1]->getCrds();	
-    const Vector &end3Crd = nodePointers[2]->getCrds();	
-
-    static Matrix coords(3,3);
-    static Vector values(4);
-    static Vector P(32) ;
-
-    for (int j=0; j<4; j++)
-		values(j) = 0.0;
-
-    if (displayMode >= 0) {
-		// Display mode is positive:
-		// display mode = 0 -> plot no contour
-		// display mode = 1-8 -> plot 1-8 stress resultant
-
-		// Get nodal displacements
-		const Vector &end1Disp = nodePointers[0]->getDisp();
-		const Vector &end2Disp = nodePointers[1]->getDisp();
-		const Vector &end3Disp = nodePointers[2]->getDisp();
-
-		// Get stress resultants
-        if (displayMode <= 8 && displayMode > 0) {
-			for (int i=0; i<4; i++) {
-				const Vector &stress = materialPointers[i]->getStressResultant();
-				values(i) = stress(displayMode-1);
-			}
-		}
-
-		// Get nodal absolute position = OriginalPosition + (Displacement*factor)
-		for (int i = 0; i < 3; i++) {
-			coords(0,i) = end1Crd(i) + end1Disp(i)*fact;
-			coords(1,i) = end2Crd(i) + end2Disp(i)*fact;
-			coords(2,i) = end3Crd(i) + end3Disp(i)*fact;
-		}
-	} else {
-		// Display mode is negative.
-		// Plot eigenvectors
-		int mode = displayMode * -1;
-		const Matrix &eigen1 = nodePointers[0]->getEigenvectors();
-		const Matrix &eigen2 = nodePointers[1]->getEigenvectors();
-		const Matrix &eigen3 = nodePointers[2]->getEigenvectors();
-		if (eigen1.noCols() >= mode) {
-			for (int i = 0; i < 3; i++) {
-				coords(0,i) = end1Crd(i) + eigen1(i,mode-1)*fact;
-				coords(1,i) = end2Crd(i) + eigen2(i,mode-1)*fact;
-				coords(2,i) = end3Crd(i) + eigen3(i,mode-1)*fact;
-
-			}    
-		} else {
-			for (int i = 0; i < 3; i++) {
-				coords(0,i) = end1Crd(i);
-				coords(1,i) = end2Crd(i);
-				coords(2,i) = end3Crd(i);
-				}
-		}
+	// place values in coords matrix
+	static Matrix coords(3, 3);
+	for (int i = 0; i < 3; i++) {
+		coords(0, i) = v1(i);
+		coords(1, i) = v2(i);
+		coords(2, i) = v3(i);
 	}
 
-    int error = 0;
-	
-	// Draw a poligon with coordinates coords and values (colors) corresponding to values vector
-    error += theViewer.drawPolygon (coords, values);
+	// Display mode is positive:
+	// display mode = 0 -> plot no contour
+	// display mode = 1-8 -> plot 1-8 stress resultant
+	static Vector values(3);
+	if (displayMode < 8 && displayMode > 0) {
+		for (int i = 0; i < 3; i++) {
+			const Vector& stress = materialPointers[i]->getStressResultant();
+			values(i) = stress(displayMode - 1);
+		}
+	}
+	else {
+		for (int i = 0; i < 3; i++)
+			values(i) = 0.0;
+	}
 
-    return error;
-
+	// draw the polygon
+	return theViewer.drawPolygon(coords, values, this->getTag());
 }
 
 void  
@@ -1945,6 +1999,12 @@ const Matrix&
  	 Bbend(2,0) = shpBend[3][i] + shpBend[4][i];
 	 Bbend(2,1) = shpBend[3][j] + shpBend[4][j];
 	 Bbend(2,2) = shpBend[3][k] + shpBend[4][k];
+
+     /*
+     bugfix: Massimo Petracca 02/26/2020. with the original implementation, the curvatures
+     sent to the section had the wrong sign.
+     */
+     Bbend *= -1.0;
 
 	 return Bbend;
  }

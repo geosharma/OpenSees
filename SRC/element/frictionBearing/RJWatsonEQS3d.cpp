@@ -18,10 +18,6 @@
 **                                                                    **
 ** ****************************************************************** */
 
-// $Revision$
-// $Date$
-// $URL$
-
 // Written: Andreas Schellenberg (andreas.schellenberg@gmail.com)
 // Created: 12/13
 // Revision: A
@@ -90,7 +86,7 @@ void* OPS_RJWatsonEQS3d()
     // materials
     UniaxialMaterial* mats[6] = { 0,0,0,0,0,0 };
     const char* type = OPS_GetString();
-    if (strcmp(type, "-P") == 0) {
+    if (strcmp(type, "-P") != 0) {
         opserr << "WARNING: want -P\n";
         return 0;
     }
@@ -107,7 +103,7 @@ void* OPS_RJWatsonEQS3d()
     }
     
     type = OPS_GetString();
-    if (strcmp(type, "-Vy") == 0) {
+    if (strcmp(type, "-Vy") != 0) {
         opserr << "WARNING: want -Vy\n";
         return 0;
     }
@@ -123,7 +119,7 @@ void* OPS_RJWatsonEQS3d()
     }
     
     type = OPS_GetString();
-    if (strcmp(type, "-Vz") == 0) {
+    if (strcmp(type, "-Vz") != 0) {
         opserr << "WARNING: want -Vz\n";
         return 0;
     }
@@ -139,7 +135,7 @@ void* OPS_RJWatsonEQS3d()
     }
     
     type = OPS_GetString();
-    if (strcmp(type, "-T") == 0) {
+    if (strcmp(type, "-T") != 0) {
         opserr << "WARNING: want -T\n";
         return 0;
     }
@@ -155,7 +151,7 @@ void* OPS_RJWatsonEQS3d()
     }
     
     type = OPS_GetString();
-    if (strcmp(type, "-My") == 0) {
+    if (strcmp(type, "-My") != 0) {
         opserr << "WARNING: want -My\n";
         return 0;
     }
@@ -171,7 +167,7 @@ void* OPS_RJWatsonEQS3d()
     }
     
     type = OPS_GetString();
-    if (strcmp(type, "-Mz") == 0) {
+    if (strcmp(type, "-Mz") != 0) {
         opserr << "WARNING: want -Mz\n";
         return 0;
     }
@@ -1033,53 +1029,33 @@ int RJWatsonEQS3d::displaySelf(Renderer &theViewer,
     int displayMode, float fact, const char **modes, int numMode)
 {
     int errCode = 0;
-    
-    // first determine the end points of the element based on
-    // the display factor (a measure of the distorted image)
-    const Vector &end1Crd = theNodes[0]->getCrds();
-    const Vector &end2Crd = theNodes[1]->getCrds();
+
+    // get coordinates
+    const Vector& end1Crd = theNodes[0]->getCrds();
+    const Vector& end2Crd = theNodes[1]->getCrds();
     Vector xp = end2Crd - end1Crd;
-    
+
+    // get displaced coordinates for ends
     static Vector v1(3);
     static Vector v2(3);
     static Vector v3(3);
-    
-    if (displayMode >= 0)  {
-        const Vector &end1Disp = theNodes[0]->getDisp();
-        const Vector &end2Disp = theNodes[1]->getDisp();
-        
-        for (int i=0; i<3; i++)  {
-            v1(i) = end1Crd(i) + end1Disp(i)*fact;
-            v3(i) = end2Crd(i) + end2Disp(i)*fact;
-        }
-        v2(0) = end2Crd(0) + (end1Disp(0) - xp(1)*end1Disp(5) + xp(2)*end1Disp(4))*fact;
-        v2(1) = end2Crd(1) + (end1Disp(1) + xp(0)*end1Disp(5) - xp(2)*end1Disp(3))*fact;
-        v2(2) = end2Crd(2) + (end1Disp(2) - xp(0)*end1Disp(4) + xp(1)*end1Disp(3))*fact;
-    } else  {
-        int mode = displayMode * -1;
-        const Matrix &eigen1 = theNodes[0]->getEigenvectors();
-        const Matrix &eigen2 = theNodes[1]->getEigenvectors();
-        
-        if (eigen1.noCols() >= mode)  {
-            for (int i=0; i<3; i++)  {
-                v1(i) = end1Crd(i) + eigen1(i,mode-1)*fact;
-                v3(i) = end2Crd(i) + eigen2(i,mode-1)*fact;
-            }
-            v2(0) = end2Crd(0) + (eigen1(0,mode-1) - xp(1)*eigen1(5,mode-1) + xp(2)*eigen1(4,mode-1))*fact;
-            v2(1) = end2Crd(1) + (eigen1(1,mode-1) + xp(0)*eigen1(5,mode-1) - xp(2)*eigen1(3,mode-1))*fact;
-            v2(2) = end2Crd(2) + (eigen1(2,mode-1) - xp(0)*eigen1(4,mode-1) + xp(1)*eigen1(3,mode-1))*fact;
-        } else  {
-            for (int i=0; i<3; i++)  {
-                v1(i) = end1Crd(i);
-                v2(i) = end1Crd(i);
-                v3(i) = end2Crd(i);
-            }
-        }
+    theNodes[0]->getDisplayCrds(v1, fact, displayMode);
+    theNodes[1]->getDisplayCrds(v2, fact, displayMode);
+
+    // get displacement vector for rotation
+    static Vector r2(6);
+    theNodes[1]->getDisplayRots(r2, fact, displayMode);
+
+    // calculate coordinates of intermediate point
+    for (int i = 0; i < 2; i++) {
+        v3(0) = v1(0) + v2(0) - end2Crd(0) + xp(1) * r2(2) - xp(2) * r2(1);
+        v3(1) = v1(1) + v2(1) - end2Crd(1) - xp(0) * r2(2) + xp(2) * r2(0);
+        v3(2) = v1(2) + v2(2) - end2Crd(2) + xp(0) * r2(1) - xp(1) * r2(0);
     }
-    
-    errCode += theViewer.drawLine (v1, v2, 1.0, 1.0, this->getTag(), 0);
-    errCode += theViewer.drawLine (v2, v3, 1.0, 1.0, this->getTag(), 0);
-    
+
+    errCode += theViewer.drawLine(v1, v3, 1.0, 1.0, this->getTag(), 0);
+    errCode += theViewer.drawLine(v3, v2, 1.0, 1.0, this->getTag(), 0);
+
     return errCode;
 }
 

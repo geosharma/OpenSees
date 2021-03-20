@@ -90,6 +90,7 @@ FE_INCLUDES  = -I$(FE)/matrix \
                -I$(FE)/element/dispBeamColumn \
                -I$(FE)/element/dispBeamColumnInt \
                -I$(FE)/element/forceBeamColumn \
+	       -I$(FE)/element/mixedBeamColumn \
                -I$(FE)/element/generic \
                -I$(FE)/element/elasticBeamColumn \
                -I$(FE)/element/8nbrick \
@@ -111,6 +112,7 @@ FE_INCLUDES  = -I$(FE)/matrix \
                -I$(FE)/element/adapter \
                -I$(FE)/element/twoNodeLink \
                -I$(FE)/element/updatedLagrangianBeamColumn \
+			   -I$(FE)/element/RockingBC \
 	       -I$(FE)/element/UWelements \
 	       -I$(FE)/element/HUelements \
                -I$(FE)/analysis    \
@@ -195,12 +197,14 @@ FE_INCLUDES  = -I$(FE)/matrix \
                -I$(FE)/reliability/tcl \
                -I$(FE)/unittest \
                -I$(FE)/api \
+	       -I$(FE)/interpreter \
                -I$(FE) \
                -I$(SUPERLUdir) \
                -I$(FE)/package \
 	       -I$(FE)/../OTHER/AMD \
                -I$(FE)/../OTHER/CSPARSE \
                -I$(FE)/../OTHER/Triangle \
-               -I$(FE)/../OTHER/Tetgen
+               -I$(FE)/../OTHER/Tetgen \
+	       -I$(FE)/../OTHER/AMGCL
                
                

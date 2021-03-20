@@ -18,10 +18,6 @@
 **                                                                    **
 ** ****************************************************************** */
 
-// $Revision$
-// $Date$
-// $URL$
-
 // Written: Andreas Schellenberg (andreas.schellenberg@gmail.com)
 // Created: 09/07
 // Revision: A
@@ -38,20 +34,181 @@
 #include <Information.h>
 #include <ElementResponse.h>
 #include <TCP_Socket.h>
+#include <UDP_Socket.h>
+#ifdef SSL
+    #include <TCP_SocketSSL.h>
+#endif
 
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <elementAPI.h>
 
+void* OPS_Adapter()
+{
+    int ndf = OPS_GetNDF();
+    if (OPS_GetNumRemainingInputArgs() < 8) {
+        opserr << "WARNING insufficient arguments\n";
+        opserr << "Want: element adapter eleTag -node Ndi Ndj ... -dof dofNdi -dof dofNdj ... -stif Kij ipPort <-ssl> <-udp> <-doRayleigh> <-mass Mij>\n";
+        return 0;
+    }
+    
+    // tags
+    int tag;
+    int numdata = 1;
+    if (OPS_GetIntInput(&numdata, &tag) < 0) {
+        opserr << "WARNING: invalid tag\n";
+        return 0;
+    }
+    
+    // nodes
+    const char* type = OPS_GetString();
+    if (strcmp(type, "-node") != 0) {
+        opserr << "WARNING expecting -node Ndi Ndj ...\n";
+        return 0;
+    }
+    ID nodes(32);
+    int numNodes = 0;
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+        int node;
+        numdata = 1;
+        int numArgs = OPS_GetNumRemainingInputArgs();
+        if (OPS_GetIntInput(&numdata, &node) < 0) {
+            if (numArgs > OPS_GetNumRemainingInputArgs()) {
+                // move current arg back by one
+                OPS_ResetCurrentInputArg(-1);
+            }
+            break;
+        }
+        nodes(numNodes++) = node;
+    }
+    nodes.resize(numNodes);
+    
+    // dofs
+    int numDOF = 0;
+    ID *dofs = new ID[numNodes];
+    for (int i = 0; i < numNodes; i++) {
+        type = OPS_GetString();
+        if (strcmp(type, "-dof") != 0 && strcmp(type, "-dir") != 0) {
+            opserr << "WARNING expecting -dof dofNd"
+                << i + 1 << ", but got " << type << endln;
+            return 0;
+        }
+        ID dofsi(ndf);
+        int numDOFi = 0;
+        while (OPS_GetNumRemainingInputArgs() > 0) {
+            int dof;
+            numdata = 1;
+            int numArgs = OPS_GetNumRemainingInputArgs();
+            if (OPS_GetIntInput(&numdata, &dof) < 0) {
+                if (numArgs > OPS_GetNumRemainingInputArgs()) {
+                    // move current arg back by one
+                    OPS_ResetCurrentInputArg(-1);
+                }
+                break;
+            }
+            if (dof < 1 || ndf < dof) {
+                opserr << "WARNING invalid dof ID\n";
+                return 0;
+            }
+            dofsi(numDOFi++) = dof - 1;
+            numDOF++;
+        }
+        dofsi.resize(numDOFi);
+        dofs[i] = dofsi;
+    }
+    
+    // stiffness matrix terms
+    type = OPS_GetString();
+    if (strcmp(type, "-stif") != 0 && strcmp(type, "-stiff") != 0) {
+        opserr << "WARNING expecting -stif kij\n";
+        return 0;
+    }
+    if (OPS_GetNumRemainingInputArgs() < numDOF*numDOF) {
+        opserr << "WARNING wrong number of kij specified\n";
+        return 0;
+    }
+    Matrix kb(numDOF, numDOF);
+    numdata = 1;
+    for (int i = 0; i < numDOF; i++) {
+        for (int j = 0; j < numDOF; j++) {
+            if (OPS_GetDoubleInput(&numdata, &kb(i, j)) < 0) {
+                opserr << "WARNING invalid stiffness value\n";
+                return 0;
+            }
+        }
+    }
+    // ipPort
+    int ipPort;
+    numdata = 1;
+    if (OPS_GetIntInput(&numdata, &ipPort) < 0) {
+        opserr << "WARNING: invalid ipPort\n";
+        return 0;
+    }
+    
+    // options
+    int ssl = 0, udp = 0;
+    int doRayleigh = 0;
+    Matrix *mb = 0;
+    if (OPS_GetNumRemainingInputArgs() < 1) {
+        return new Adapter(tag, nodes, dofs, kb, ipPort);
+    }
+    
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+        type = OPS_GetString();
+        if (strcmp(type, "-ssl") == 0) {
+            ssl = 1; udp = 0;
+        }
+        else if (strcmp(type, "-udp") == 0) {
+            udp = 1; ssl = 0;
+        }
+        else if (strcmp(type, "-doRayleigh") == 0) {
+            doRayleigh = 1;
+        }
+        else if (strcmp(type, "-mass") == 0) {
+            if (OPS_GetNumRemainingInputArgs() < numDOF*numDOF) {
+                opserr << "WARNING wrong number of mij specified\n";
+                return 0;
+            }
+            double mij;
+            numdata = 1;
+            mb = new Matrix(numDOF, numDOF);
+            for (int i = 0; i < numDOF; i++) {
+                for (int j = 0; j < numDOF; j++) {
+                    if (OPS_GetDoubleInput(&numdata, &mij) < 0) {
+                        opserr << "WARNING invalid damping value\n";
+                        delete mb;
+                        return 0;
+                    }
+                    (*mb)(i, j) = mij;
+                }
+            }
+        }
+    }
+    
+    // create object
+    Element *theEle = new Adapter(tag, nodes, dofs, kb, ipPort,
+        ssl, udp, doRayleigh, mb);
+    
+    // cleanup dynamic memory
+    if (dofs != 0)
+        delete[] dofs;
+    if (mb != 0)
+        delete mb;
+    
+    return theEle;
+}
+
+
 // responsible for allocating the necessary space needed
 // by each object and storing the tags of the end nodes.
-Adapter::Adapter(int tag, ID nodes, ID *dof,
-    const Matrix &_kb, int ipport, int addRay, const Matrix *_mb)
+Adapter::Adapter(int tag, ID nodes, ID *dof, const Matrix &_kb,
+    int ipport, int _ssl, int _udp, int addRay, const Matrix *_mb)
     : Element(tag, ELE_TAG_Adapter),
     connectedExternalNodes(nodes), basicDOF(1), numExternalNodes(0),
-    numDOF(0), numBasicDOF(0), kb(_kb), ipPort(ipport), addRayleigh(addRay),
-    mb(0), tPast(0.0), theMatrix(1,1), theVector(1), theLoad(1), db(1), q(1),
+    numDOF(0), numBasicDOF(0), kb(_kb), ipPort(ipport), ssl(_ssl),
+    udp(_udp), addRayleigh(addRay), mb(0), tPast(0.0),
+    theMatrix(1,1), theVector(1), theLoad(1), db(1), q(1),
     theChannel(0), rData(0), recvData(0), sData(0), sendData(0),
     ctrlDisp(0), ctrlVel(0), ctrlAccel(0), ctrlForce(0), ctrlTime(0),
     daqDisp(0), daqVel(0), daqAccel(0), daqForce(0), daqTime(0)
@@ -102,8 +259,9 @@ Adapter::Adapter(int tag, ID nodes, ID *dof,
 Adapter::Adapter()
     : Element(0, ELE_TAG_Adapter),
     connectedExternalNodes(1), basicDOF(1), numExternalNodes(0),
-    numDOF(0), numBasicDOF(0), kb(1,1), ipPort(0), addRayleigh(0), mb(0),
-    tPast(0.0), theMatrix(1,1), theVector(1), theLoad(1), db(1), q(1),
+    numDOF(0), numBasicDOF(0), kb(1,1), ipPort(0), ssl(0),
+    udp(0), addRayleigh(0), mb(0), tPast(0.0),
+    theMatrix(1,1), theVector(1), theLoad(1), db(1), q(1),
     theChannel(0), rData(0), recvData(0), sData(0), sendData(0),
     ctrlDisp(0), ctrlVel(0), ctrlAccel(0), ctrlForce(0), ctrlTime(0),
     daqDisp(0), daqVel(0), daqAccel(0), daqForce(0), daqTime(0)
@@ -502,16 +660,18 @@ const Vector& Adapter::getResistingForceIncInertia()
 int Adapter::sendSelf(int commitTag, Channel &sChannel)
 {
     // send element parameters
-    static Vector data(9);
+    static Vector data(11);
     data(0) = this->getTag();
     data(1) = numExternalNodes;
     data(2) = ipPort;
-    data(3) = addRayleigh;
-    data(4) = (mb==0) ? 0 : 1;
-    data(5) = alphaM;
-    data(6) = betaK;
-    data(7) = betaK0;
-    data(8) = betaKc;
+    data(3) = ssl;
+    data(4) = udp;
+    data(5) = addRayleigh;
+    data(6) = (mb==0) ? 0 : 1;
+    data(7) = alphaM;
+    data(8) = betaK;
+    data(9) = betaK0;
+    data(10) = betaKc;
     sChannel.sendVector(0, commitTag, data);
     
     // send the end nodes and dofs
@@ -521,7 +681,7 @@ int Adapter::sendSelf(int commitTag, Channel &sChannel)
     
     // send the stiffness and mass matrices
     sChannel.sendMatrix(0, commitTag, kb);
-    if ((int)data(4))
+    if ((int)data(6))
         sChannel.sendMatrix(0, commitTag, *mb);
     
     return 0;
@@ -540,16 +700,18 @@ int Adapter::recvSelf(int commitTag, Channel &rChannel,
         delete mb;
     
     // receive element parameters
-    static Vector data(9);
+    static Vector data(11);
     rChannel.recvVector(0, commitTag, data);
     this->setTag((int)data(0));
     numExternalNodes = (int)data(1);
     ipPort = (int)data(2);
-    addRayleigh = (int)data(3);
-    alphaM = data(5);
-    betaK = data(6);
-    betaK0 = data(7);
-    betaKc = data(8);
+    ssl = (int)data(3);
+    udp = (int)data(4);
+    addRayleigh = (int)data(5);
+    alphaM = data(7);
+    betaK = data(8);
+    betaK0 = data(9);
+    betaKc = data(10);
     
     // initialize nodes and receive them
     connectedExternalNodes.resize(numExternalNodes);
@@ -584,7 +746,7 @@ int Adapter::recvSelf(int commitTag, Channel &rChannel,
     // receive the stiffness and mass matrices
     kb.resize(numBasicDOF,numBasicDOF);
     rChannel.recvMatrix(0, commitTag, kb);
-    if ((int)data(4))  {
+    if ((int)data(6))  {
         mb = new Matrix(numBasicDOF,numBasicDOF);
         rChannel.recvMatrix(0, commitTag, *mb);
     }
@@ -604,57 +766,17 @@ int Adapter::recvSelf(int commitTag, Channel &rChannel,
 int Adapter::displaySelf(Renderer &theViewer,
     int displayMode, float fact, const char **modes, int numMode)
 {
-    int rValue = 0, i, j;
+    int rValue = 0;
     
     if (numExternalNodes > 1)  {
-        if (displayMode >= 0)  {
-            for (i=0; i<numExternalNodes-1; i++)  {
-                const Vector &end1Crd = theNodes[i]->getCrds();
-                const Vector &end2Crd = theNodes[i+1]->getCrds();
-                
-                const Vector &end1Disp = theNodes[i]->getDisp();
-                const Vector &end2Disp = theNodes[i+1]->getDisp();
-                
-                int end1NumCrds = end1Crd.Size();
-                int end2NumCrds = end2Crd.Size();
-                
-                static Vector v1(3), v2(3);
-                
-                for (j=0; j<end1NumCrds; j++)
-                    v1(j) = end1Crd(j) + end1Disp(j)*fact;
-                for (j=0; j<end2NumCrds; j++)
-                    v2(j) = end2Crd(j) + end2Disp(j)*fact;
-                
-                rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
-            }
-        } else  {
-            int mode = displayMode * -1;
-            for (i=0; i<numExternalNodes-1; i++)  {
-                const Vector &end1Crd = theNodes[i]->getCrds();
-                const Vector &end2Crd = theNodes[i+1]->getCrds();
-                
-                const Matrix &eigen1 = theNodes[i]->getEigenvectors();
-                const Matrix &eigen2 = theNodes[i+1]->getEigenvectors();
-                
-                int end1NumCrds = end1Crd.Size();
-                int end2NumCrds = end2Crd.Size();
-                
-                static Vector v1(3), v2(3);
-                
-                if (eigen1.noCols() >= mode)  {
-                    for (j=0; j<end1NumCrds; j++)
-                        v1(j) = end1Crd(j) + eigen1(j,mode-1)*fact;
-                    for (j=0; j<end2NumCrds; j++)
-                        v2(j) = end2Crd(j) + eigen2(j,mode-1)*fact;
-                } else  {
-                    for (j=0; j<end1NumCrds; j++)
-                        v1(j) = end1Crd(j);
-                    for (j=0; j<end2NumCrds; j++)
-                        v2(j) = end2Crd(j);
-                }
-                
-                rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
-            }
+        for (int i = 0; i < numExternalNodes - 1; i++) {
+            static Vector v1(3);
+            static Vector v2(3);
+
+            theNodes[i]->getDisplayCrds(v1, fact, displayMode);
+            theNodes[i + 1]->getDisplayCrds(v2, fact, displayMode);
+
+            rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
         }
     }
     
@@ -882,7 +1004,15 @@ int Adapter::getResponse(int responseID, Information &eleInformation)
 int Adapter::setupConnection()
 {
     // setup the connection
-    theChannel = new TCP_Socket(ipPort);
+    if (udp)
+        theChannel = new UDP_Socket(ipPort);
+#ifdef SSL
+    else if (ssl)
+        theChannel = new TCP_SocketSSL(ipPort);
+#endif
+    else
+        theChannel = new TCP_Socket(ipPort);
+    
     if (theChannel != 0) {
         opserr << "\nChannel successfully created: "
             << "Waiting for ECSimAdapter experimental control...\n";

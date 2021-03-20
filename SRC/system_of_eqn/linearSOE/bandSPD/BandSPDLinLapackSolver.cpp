@@ -125,11 +125,16 @@ BandSPDLinLapackSolver::solve(void)
     }
 #endif    
 
-    // check if successfull
+    // check if successful
     if (info != 0) {
-	opserr << "WARNING BandSPDLinLapackSolver::solve() - the LAPACK";
-	opserr << " routines returned " << info << endln;
-	return -info;
+      if (info > 0) {
+	opserr << "WARNING BandSPDLinLapackSolver::solve() -";
+	opserr << "factorization failed, matrix singular U(i,i) = 0, i= " << info-1 << endln;
+	return -info+1;
+      } else {
+	opserr << "WARNING BandSPDLinLapackSolver::solve() - OpenSees code error\n";
+	return info;
+      }      
     }
 
     theSOE->factored = true;

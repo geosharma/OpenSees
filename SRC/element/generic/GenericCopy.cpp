@@ -18,10 +18,6 @@
 **                                                                    **
 ** ****************************************************************** */
 
-// $Revision$
-// $Date$
-// $URL$
-
 // Written: Andreas Schellenberg (andreas.schellenberg@gmail.com)
 // Created: 11/06
 // Revision: A
@@ -41,6 +37,61 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <elementAPI.h>
+
+
+void* OPS_GenericCopy()
+{
+    if (OPS_GetNumRemainingInputArgs() < 5) {
+        opserr << "WARNING insufficient arguments\n";
+        opserr << "Want: element genericCopy eleTag -node Ndi ... -src srcTag\n";
+        return 0;
+    }
+    
+    // tags
+    int tag;
+    int numdata = 1;
+    if (OPS_GetIntInput(&numdata, &tag) < 0) {
+        opserr << "WARNING: invalid tag\n";
+        return 0;
+    }
+    
+    // nodes
+    const char* type = OPS_GetString();
+    if (strcmp(type, "-node") != 0) {
+        opserr << "WARNING expecting -node Ndi Ndj ...\n";
+        return 0;
+    }
+    ID nodes(32);
+    int numNodes = 0;
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+        int node;
+        numdata = 1;
+        if (OPS_GetIntInput(&numdata, &node) < 0) {
+            break;
+        }
+        nodes(numNodes++) = node;
+    }
+    nodes.resize(numNodes);
+    
+    // source element
+    int srcTag;
+    numdata = 1;
+    type = OPS_GetString();
+    if (strcmp(type, "-src") != 0) {
+        opserr << "WARNING expecting -src srcTag\n";
+        return 0;
+    }
+    if (OPS_GetIntInput(&numdata, &srcTag) < 0) {
+        opserr << "WARNING: invalid srcTag\n";
+        return 0;
+    }
+    
+    // create object
+    Element *theEle = new GenericCopy(tag, nodes, srcTag);
+    
+    return theEle;
+}
 
 
 // responsible for allocating the necessary space needed
@@ -405,57 +456,17 @@ int GenericCopy::recvSelf(int commitTag, Channel &rChannel,
 int GenericCopy::displaySelf(Renderer &theViewer,
     int displayMode, float fact, const char **modes, int numMode)
 {
-    int rValue = 0, i, j;
+    int rValue = 0;
 
-    if (numExternalNodes > 1)  {
-        if (displayMode >= 0)  {
-            for (i=0; i<numExternalNodes-1; i++)  {
-                const Vector &end1Crd = theNodes[i]->getCrds();
-                const Vector &end2Crd = theNodes[i+1]->getCrds();
+    if (numExternalNodes > 1) {
+        for (int i = 0; i < numExternalNodes - 1; i++) {
+            static Vector v1(3);
+            static Vector v2(3);
 
-                const Vector &end1Disp = theNodes[i]->getDisp();
-                const Vector &end2Disp = theNodes[i+1]->getDisp();
+            theNodes[i]->getDisplayCrds(v1, fact, displayMode);
+            theNodes[i + 1]->getDisplayCrds(v2, fact, displayMode);
 
-                int end1NumCrds = end1Crd.Size();
-                int end2NumCrds = end2Crd.Size();
-
-                Vector v1(3), v2(3);
-
-                for (j=0; j<end1NumCrds; j++)
-                    v1(j) = end1Crd(j) + end1Disp(j)*fact;
-                for (j=0; j<end2NumCrds; j++)
-                    v2(j) = end2Crd(j) + end2Disp(j)*fact;
-
-                rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
-            }
-        } else  {
-            int mode = displayMode * -1;
-            for (i=0; i<numExternalNodes-1; i++)  {
-                const Vector &end1Crd = theNodes[i]->getCrds();
-                const Vector &end2Crd = theNodes[i+1]->getCrds();
-
-                const Matrix &eigen1 = theNodes[i]->getEigenvectors();
-                const Matrix &eigen2 = theNodes[i+1]->getEigenvectors();
-
-                int end1NumCrds = end1Crd.Size();
-                int end2NumCrds = end2Crd.Size();
-
-                Vector v1(3), v2(3);
-
-                if (eigen1.noCols() >= mode)  {
-                    for (j=0; j<end1NumCrds; j++)
-                        v1(j) = end1Crd(j) + eigen1(j,mode-1)*fact;
-                    for (j=0; j<end2NumCrds; j++)
-                        v2(j) = end2Crd(j) + eigen2(j,mode-1)*fact;
-                } else  {
-                    for (j=0; j<end1NumCrds; j++)
-                        v1(j) = end1Crd(j);
-                    for (j=0; j<end2NumCrds; j++)
-                        v2(j) = end2Crd(j);
-                }
-
-                rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
-            }
+            rValue += theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag(), 0);
         }
     }
 

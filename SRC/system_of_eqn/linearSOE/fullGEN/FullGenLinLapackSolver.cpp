@@ -126,11 +126,16 @@ FullGenLinLapackSolver::solve(void)
     }
 #endif
     
-    // check if successfull
+    // check if successful
     if (info != 0) {
-	opserr << "WARNING FullGenLinLapackSolver::solve()";
-	opserr << " - lapack solver failed - " << info << " returned\n";
-	return -info;
+      if (info > 0) {
+	opserr << "WARNING FullGenLinLapackSolver::solve() -";
+	opserr << "factorization failed, matrix singular U(i,i) = 0, i= " << info-1 << endln;
+	return -info+1;
+      } else {
+	opserr << "WARNING FullGenLinLapackSolver::solve() - OpenSees code error\n";
+	return info;
+      }      
     }
 
     

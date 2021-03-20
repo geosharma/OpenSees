@@ -41,6 +41,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <map>
 
 #include <ElementResponse.h>
 
@@ -152,6 +153,135 @@ OPS_CorotTrussElement()
   }
 
   return theElement;
+}
+
+void *
+OPS_CorotTrussElement(const ID& info)
+{
+    if (info.Size() == 0) return 0;
+
+    Element *theElement = 0;
+
+    int iData[3];
+
+    double A = 0.0;
+    double rho = 0.0;
+    int matTag = 0;
+    int doRayleigh = 0; // by default rayleigh not done
+    int cMass = 0; // by default use lumped mass matrix
+    int ndm = OPS_GetNDM();
+
+    static std::map<int, Vector> meshdata;
+    if (info(0) == 1) {
+
+        // save data
+        int numRemainingArgs = OPS_GetNumRemainingInputArgs();
+
+        if (numRemainingArgs < 2) {
+            opserr << "Invalid Args want: element CorotTruss $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+            return 0;
+        }
+
+        int numData = 1;
+        if (OPS_GetDouble(&numData, &A) != 0) {
+            opserr << "WARNING: Invalid A: element CorotTruss " <<
+                   " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+            return 0;
+        }
+
+        numData = 1;
+        if (OPS_GetInt(&numData, &matTag) != 0) {
+            opserr << "WARNING: Invalid matTag: element CorotTruss "  <<
+                   " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+            return 0;
+        }
+
+        while (OPS_GetNumRemainingInputArgs() > 1) {
+            const char *argvS = OPS_GetString();
+
+            if (strcmp(argvS,"-rho") == 0) {
+                numData = 1;
+                if (OPS_GetDouble(&numData, &rho) != 0) {
+                    opserr << "WARNING Invalid rho in element CorotTruss " <<
+                           " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+                    return 0;
+                }
+            } else if (strcmp(argvS,"-cMass") == 0) {
+                numData = 1;
+                if (OPS_GetInt(&numData, &cMass) != 0) {
+                    opserr << "WARNING: Invalid cMass in element CorotTruss " <<
+                           " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+                    return 0;
+                }
+            } else if (strcmp(argvS,"-doRayleigh") == 0) {
+                numData = 1;
+                if (OPS_GetInt(&numData, &doRayleigh) != 0) {
+                    opserr << "WARNING: Invalid doRayleigh in element CorotTruss " <<
+                           " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+                    return 0;
+                }
+            } else {
+                opserr << "WARNING: Invalid option " << argvS << "  in: element CorotTruss " <<
+                       " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+                return 0;
+            }
+
+        }
+
+        if (info.Size() < 2) {
+            opserr << "WARNING: need info -- inmesh, meshtag\n";
+            return 0;
+        }
+
+        // save the data for a mesh
+        Vector& mdata = meshdata[info(1)];
+        mdata.resize(5);
+        mdata(0) = A;
+        mdata(1) = rho;
+        mdata(2) = (double) matTag;
+        mdata(3) = (double) doRayleigh;
+        mdata(4) = (double) cMass;
+        return &meshdata;
+
+    } else if (info(0) == 2) {
+
+        if (info.Size() < 5) {
+            opserr << "WARNING: need info -- inmesh, meshtag, eleTag, nd1, nd2\n";
+            return 0;
+        }
+
+        // get the data for a mesh
+        Vector& mdata = meshdata[info(1)];
+        if (mdata.Size() < 5) return 0;
+
+        iData[0] = info(2);
+        iData[1] = info(3);
+        iData[2] = info(4);
+
+        A = mdata(0);
+        rho = mdata(1);
+        matTag = (int) mdata(2);
+        doRayleigh = (int) mdata(3);
+        cMass = (int) mdata(4);
+    }
+
+    UniaxialMaterial *theUniaxialMaterial = OPS_GetUniaxialMaterial(matTag);
+
+    if (theUniaxialMaterial == 0) {
+        opserr << "WARNING: Invalid material not found element CorotTruss " << iData[0] << " $iNode $jNode $A " <<
+               matTag << " <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+        return 0;
+    }
+
+    // now create the CorotTruss
+    theElement = new CorotTruss(iData[0], ndm, iData[1], iData[2], *theUniaxialMaterial, A, rho, doRayleigh, cMass);
+
+    if (theElement == 0) {
+        opserr << "WARNING: out of memory: element CorotTruss " << iData[0] <<
+               " $iNode $jNode $A $matTag <-rho $rho> <-cMass $flag> <-doRayleigh $flag>\n";
+    }
+
+    return theElement;
 }
 
 
@@ -885,22 +1015,13 @@ CorotTruss::displaySelf(Renderer &theViewer, int displayMode, float fact, const 
 	if (Ln == 0.0)
 		return 0;
 
-	// first determine the two end points of the CorotTruss based on
-	// the display factor (a measure of the distorted image)
-	// store this information in 2 3d vectors v1 and v2
-	const Vector &end1Crd = theNodes[0]->getCrds();
-	const Vector &end2Crd = theNodes[1]->getCrds();	
-	const Vector &end1Disp = theNodes[0]->getDisp();
-	const Vector &end2Disp = theNodes[1]->getDisp();    
+    static Vector v1(3);
+    static Vector v2(3);
 
-	static Vector v1(3);
-	static Vector v2(3);
-	for (int i = 0; i < numDIM; i++) {
-		v1(i) = end1Crd(i)+end1Disp(i)*fact;
-		v2(i) = end2Crd(i)+end2Disp(i)*fact;    
-	}
+    theNodes[0]->getDisplayCrds(v1, fact, displayMode);
+    theNodes[1]->getDisplayCrds(v2, fact, displayMode);
 
-	return theViewer.drawLine(v1, v2, 1.0, 1.0);
+    return theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag());
 }
 
 void
@@ -977,10 +1098,41 @@ CorotTruss::setResponse(const char **argv, int argc, OPS_Stream &output)
             output.tag("ResponseType", "U");
             theResponse = new ElementResponse(this, 3, 0.0);
 
-    // a material quantity
-    } else if (strcmp(argv[0],"material") == 0 || strcmp(argv[0],"-material") == 0) {
+            // a material quantity
+    }
+    else if (strcmp(argv[0], "material") == 0 || strcmp(argv[0], "-material") == 0) {
+        output.tag("GaussPointOutput");
+        output.attr("number", 1);
+        output.attr("eta", 0.0);
 
-        theResponse =  theMaterial->setResponse(&argv[1], argc-1, output);
+        if (argc > 1) {
+            // we need at least one more argument otherwise 
+            // there is no need to forward this call to the material
+            if (argc > 2) {
+                // if we have 2 or more extra arguments, the first one 
+                // could be an integer. In this case we check to see if it is the section id
+                // (only 1 in this case)
+                int sectionNum = atoi(argv[1]);
+                if (sectionNum == 0) {
+                    // if it is not a number we forward the call to the section as usual
+                    theResponse = theMaterial->setResponse(&argv[1], argc - 1, output);
+                }
+                else {
+                    // it is a number. Now we have to make sure it is within the allowed range
+                    // for this element (in this case it can only be 1)
+                    // If it is > 1, then we MUST return NULL, because the MPCO recorder iteratively
+                    // uses this call to understand how many fibers we have in a section
+                    if (sectionNum == 1) {
+                        theResponse = theMaterial->setResponse(&argv[2], argc - 2, output);
+                    }
+                }
+            }
+            else {
+                // otherwise forward it as usual
+                theResponse = theMaterial->setResponse(&argv[1], argc - 1, output);
+            }
+        }
+        output.endTag();
     }
 
     output.endTag();

@@ -1596,32 +1596,13 @@ DispBeamColumn3dThermal::Print(OPS_Stream &s, int flag)
 int
 DispBeamColumn3dThermal::displaySelf(Renderer &theViewer, int displayMode, float fact, const char **modes, int numModes)
 {
-	static Vector v1(3);
-	static Vector v2(3);
+    static Vector v1(3);
+    static Vector v2(3);
 
-	if (displayMode >= 0) {
+    theNodes[0]->getDisplayCrds(v1, fact, displayMode);
+    theNodes[1]->getDisplayCrds(v2, fact, displayMode);
 
-		theNodes[0]->getDisplayCrds(v1, fact);
-		theNodes[1]->getDisplayCrds(v2, fact);
-
-	}
-	else {
-
-		theNodes[0]->getDisplayCrds(v1, 0.);
-		theNodes[1]->getDisplayCrds(v2, 0.);
-
-		// add eigenvector values
-		int mode = displayMode * -1;
-		const Matrix &eigen1 = theNodes[0]->getEigenvectors();
-		const Matrix &eigen2 = theNodes[1]->getEigenvectors();
-		if (eigen1.noCols() >= mode) {
-			for (int i = 0; i < 3; i++) {
-				v1(i) += eigen1(i, mode - 1)*fact;
-				v2(i) += eigen2(i, mode - 1)*fact;
-			}
-		}
-	}
-	return theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag());
+    return theViewer.drawLine(v1, v2, 1.0, 1.0, this->getTag());
 }
 
 Response*
@@ -1854,9 +1835,11 @@ DispBeamColumn3dThermal::setParameter(const char **argv, int argc, Parameter &pa
     return -1;
 
   // If the parameter belongs to the element itself
-  if (strcmp(argv[0],"rho") == 0)
+  if (strcmp(argv[0],"rho") == 0) {
+    param.setValue(rho);
     return param.addObject(1, this);
-
+  }
+  
   if (strstr(argv[0],"sectionX") != 0) {
     if (argc < 3)
 		return -1;
@@ -1897,7 +1880,7 @@ DispBeamColumn3dThermal::setParameter(const char **argv, int argc, Parameter &pa
     return ok;
   }
 
-  else if (strstr(argv[0],"integration") != 0) {
+  if (strstr(argv[0],"integration") != 0) {
 
     if (argc < 2)
       return -1;
@@ -1907,10 +1890,19 @@ DispBeamColumn3dThermal::setParameter(const char **argv, int argc, Parameter &pa
 
   // Default, send to every object
   int ok = 0;
-  for (int i = 0; i < numSections; i++)
-    ok += theSections[i]->setParameter(argv, argc, param);
-  ok += beamInt->setParameter(argv, argc, param);
-  return ok;
+  int result = -1;
+
+  for (int i = 0; i < numSections; i++) {
+    ok = theSections[i]->setParameter(argv, argc, param);
+    if (ok != -1)
+      result = ok;
+  }
+  
+  ok = beamInt->setParameter(argv, argc, param);
+  if (ok != -1)
+    result = ok;
+
+  return result;
 }
 
 int

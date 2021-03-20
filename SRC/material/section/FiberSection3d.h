@@ -47,10 +47,10 @@ class FiberSection3d : public SectionForceDeformation
   public:
     FiberSection3d(); 
     FiberSection3d(int tag, int numFibers, Fiber **fibers, 
-		   UniaxialMaterial *torsion = 0);
-    FiberSection3d(int tag, int numFibers, UniaxialMaterial *torsion = 0);
+		   UniaxialMaterial &torsion, bool compCentroid=true);
+    FiberSection3d(int tag, int numFibers, UniaxialMaterial &torsion, bool compCentroid=true);
     FiberSection3d(int tag, int numFibers, UniaxialMaterial **mats,
-		   SectionIntegration &si, UniaxialMaterial *torsion = 0);
+		   SectionIntegration &si, UniaxialMaterial &torsion, bool compCentroid=true);
     ~FiberSection3d();
 
     const char *getClassType(void) const {return "FiberSection3d";};
@@ -107,7 +107,8 @@ class FiberSection3d : public SectionForceDeformation
     double QzBar, QyBar, Abar;
     double yBar;       // Section centroid
     double zBar;
-  
+    bool computeCentroid;
+    
     SectionIntegration *sectionIntegr;
 
     static ID code;
